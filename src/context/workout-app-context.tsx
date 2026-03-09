@@ -2,7 +2,9 @@
 
 import { useAuth, useUser } from "@clerk/nextjs";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { DEFAULT_PROGRESSION } from "@/lib/progression";
 import { applyWorkoutProgression } from "@/lib/progression";
+import { ImportedWorkoutDraft } from "@/lib/importer";
 import { EXERCISE_BY_KEY } from "@/lib/program";
 import {
   DEFAULT_APP_STATE,
@@ -41,6 +43,7 @@ type WorkoutAppContextValue = {
   updateSettings: (nextSettings: Partial<AppSettings>) => void;
   deleteWorkout: (workoutId: string) => void;
   updateWorkout: (updatedWorkout: WorkoutLog) => void;
+  importWorkouts: (workouts: ImportedWorkoutDraft[]) => Promise<{ imported: number; skipped: number }>;
 };
 
 const WorkoutAppContext = createContext<WorkoutAppContextValue | null>(null);
@@ -75,6 +78,61 @@ function computePersonalRecords(logs: WorkoutLog[]): PersonalRecord[] {
   }
 
   return [...records.values()];
+}
+
+function summarizeWorkout(exercises: WorkoutExerciseLog[]): WorkoutSummary {
+  const allSuccessful = exercises.every((exercise) =>
+    exercise.setResults.every(
+      (setResult) => !setResult.skipped && setResult.completed && setResult.completedReps >= setResult.targetReps,
+    ),
+  );
+  return allSuccessful ? "up" : "down";
+}
+
+function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number) {
+  if (logs.length === 0) {
+    return DEFAULT_PROGRESSION;
+  }
+
+  const ascending = [...logs].sort((a, b) => (a.date > b.date ? 1 : -1));
+  let progression = { ...DEFAULT_PROGRESSION };
+
+  for (const workout of ascending) {
+    progression = applyWorkoutProgression(
+      {
+        ...progression,
+        nextWorkoutType: workout.workoutType,
+      },
+      workout.exercises,
+      increment,
+    );
+  }
+
+  return progression;
+}
+
+function buildWorkoutFingerprint(workout: {
+  date: string;
+  workoutType: WorkoutLog["workoutType"];
+  exercises: WorkoutLog["exercises"];
+}) {
+  const compactExercises = [...workout.exercises]
+    .sort((a, b) => a.exerciseKey.localeCompare(b.exerciseKey))
+    .map((exercise) => ({
+      exerciseKey: exercise.exerciseKey,
+      weight: Number(exercise.weight.toFixed(2)),
+      sets: exercise.setResults.map((setResult) => ({
+        reps: setResult.completedReps,
+        target: setResult.targetReps,
+        skipped: setResult.skipped,
+      })),
+    }));
+
+  return JSON.stringify({
+    date: workout.date.slice(0, 10),
+    workoutType: workout.workoutType,
+    exercises: compactExercises,
+  });
 }
 
 export function WorkoutAppProvider({ children }: { children: React.ReactNode }) {
@@ -305,6 +363,72 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     }));
   };
 
+  const importWorkouts = async (workouts: ImportedWorkoutDraft[]) => {
+    if (workouts.length === 0) {
+      return { imported: 0, skipped: 0 };
+    }
+
+    const existingFingerprintSet = new Set(state.workoutLogs.map((workout) => buildWorkoutFingerprint(workout)));
+
+    const importedLogs: WorkoutLog[] = [];
+    for (const workout of workouts) {
+      const nextLog: WorkoutLog = {
+        id: crypto.randomUUID(),
+        userId: user?.id ?? "local",
+        date: workout.date,
+        workoutType: workout.workoutType,
+        workoutNote: workout.workoutNote,
+        workoutSummary: summarizeWorkout(workout.exercises),
+        exercises: workout.exercises,
+      };
+      const fingerprint = buildWorkoutFingerprint(nextLog);
+      if (existingFingerprintSet.has(fingerprint)) {
+        continue;
+      }
+      existingFingerprintSet.add(fingerprint);
+      importedLogs.push(nextLog);
+    }
+
+    if (importedLogs.length === 0) {
+      return { imported: 0, skipped: workouts.length };
+    }
+
+    const mergedLogs = [...importedLogs, ...state.workoutLogs].sort((a, b) => (a.date > b.date ? -1 : 1));
+    const nextProgression = recomputeProgressionFromLogs(mergedLogs, state.settings.weightIncrement);
+
+    setState((previous) => ({
+      ...previous,
+      workoutLogs: mergedLogs,
+      progression: nextProgression,
+    }));
+
+    if (user?.id) {
+      await runSupabaseTask(async (token) => {
+        for (const workout of importedLogs) {
+          const result = await persistWorkoutToSupabase(workout, token);
+          if (!result.ok) {
+            return result;
+          }
+        }
+        const progressionSync = await persistSupabaseState(
+          user.id,
+          {
+            ...state,
+            workoutLogs: mergedLogs,
+            progression: nextProgression,
+          },
+          token,
+        );
+        return progressionSync;
+      });
+    }
+
+    return {
+      imported: importedLogs.length,
+      skipped: workouts.length - importedLogs.length,
+    };
+  };
+
   const personalRecords = useMemo(() => computePersonalRecords(state.workoutLogs), [state.workoutLogs]);
 
   const value: WorkoutAppContextValue = {
@@ -321,6 +445,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     updateSettings,
     deleteWorkout,
     updateWorkout,
+    importWorkouts,
   };
 
   return <WorkoutAppContext.Provider value={value}>{children}</WorkoutAppContext.Provider>;

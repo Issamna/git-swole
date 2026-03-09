@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useWorkoutApp } from "@/context/workout-app-context";
 import { EXERCISES } from "@/lib/program";
 import { ExerciseKey } from "@/lib/types";
@@ -120,6 +121,19 @@ export default function SettingsPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Data Management</div>
+        <p className="mt-2 text-sm text-[#d7e4eb]">
+          Import StrongLifts CSV history and sync it to your account.
+        </p>
+        <Link
+          href="/import"
+          className="mt-3 inline-block rounded-md bg-[#45bb7c] px-3 py-1.5 text-sm font-medium text-[#112019]"
+        >
+          Open Import Tool
+        </Link>
       </div>
     </div>
   );
