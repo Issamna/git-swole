@@ -1,22 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Poppins } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/app/providers";
 import { AppNav } from "@/components/app-nav";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const poppins = Poppins({
+  variable: "--font-poppins",
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "Git Swole",
   description: "StrongLifts-style 5x5 workout app",
+  icons: {
+    icon: "/gitswole.png",
+    apple: "/gitswole.png",
+  },
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} bg-zinc-50 antialiased`}>
+      <body className={`${poppins.variable} antialiased`}>
         <Providers>
           <AppNav />
           <main className="mx-auto w-full max-w-6xl p-4">{children}</main>

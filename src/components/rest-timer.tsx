@@ -41,18 +41,18 @@ export function RestTimer({ defaultSeconds, autoStartToken = 0 }: RestTimerProps
   }, [autoStartToken, defaultSeconds]);
 
   return (
-    <div className="rounded-lg border border-black/10 p-4">
-      <div className="text-xs uppercase text-zinc-500">Rest Timer</div>
+    <div className="rounded-lg border border-[#334753] bg-[#24323a] p-4">
+      <div className="text-xs uppercase text-[#9ab0bd]">Rest Timer</div>
       <div className="mt-1 text-3xl font-semibold">{secondsLeft}s</div>
       <div className="mt-3 flex gap-2">
         <button
-          className="rounded bg-black px-3 py-1.5 text-sm text-white"
+          className="rounded bg-[#45bb7c] px-3 py-1.5 text-sm font-medium text-[#112019]"
           onClick={() => setIsRunning((previous) => !previous)}
         >
           {isRunning ? "Pause" : "Start"}
         </button>
         <button
-          className="rounded border border-black/20 px-3 py-1.5 text-sm"
+          className="rounded border border-[#334753] bg-[#2b3a43] px-3 py-1.5 text-sm"
           onClick={() => {
             setSecondsLeft(defaultSeconds);
             setIsRunning(false);

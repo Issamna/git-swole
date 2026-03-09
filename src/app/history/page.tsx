@@ -35,14 +35,14 @@ export default function HistoryPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Workout History</h1>
       {workoutLogs.map((workout) => (
-        <div key={workout.id} className="rounded-xl border border-black/10 bg-white p-4">
+        <div key={workout.id} className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
           <button
             className="w-full text-left"
             onClick={() => setExpandedId((previous) => (previous === workout.id ? null : workout.id))}
           >
-            <div className="text-sm text-zinc-500">{new Date(workout.date).toLocaleDateString()}</div>
+            <div className="text-sm text-[#9ab0bd]">{new Date(workout.date).toLocaleDateString()}</div>
             <div className="font-semibold">{`Workout ${workout.workoutType}`}</div>
-            <div className="text-sm text-zinc-600">
+            <div className="text-sm text-[#c7d7e0]">
               {workout.exercises
                 .map((exercise) => `${getExerciseName(exercise.exerciseKey)} ${exercise.weight}`)
                 .join(" | ")}
@@ -56,9 +56,9 @@ export default function HistoryPage() {
                   <div className="mt-1 grid gap-1">
                     {exercise.setResults.map((setResult, setIndex) => (
                       <div key={setResult.setNumber} className="grid grid-cols-[64px_1fr] gap-2">
-                        <div className="text-xs text-zinc-500">{`Set ${setResult.setNumber}`}</div>
+                        <div className="text-xs text-[#9ab0bd]">{`Set ${setResult.setNumber}`}</div>
                         <input
-                          className="rounded border border-black/20 px-2 py-1 text-sm"
+                          className="rounded border border-[#334753] bg-[#2b3a43] px-2 py-1 text-sm"
                           type="number"
                           value={setResult.completedReps}
                           onChange={(event) =>
@@ -86,7 +86,7 @@ export default function HistoryPage() {
         </div>
       ))}
       {workoutLogs.length === 0 ? (
-        <div className="rounded-xl border border-black/10 bg-white p-4 text-sm text-zinc-600">
+        <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4 text-sm text-[#c7d7e0]">
           No workout history yet.
         </div>
       ) : null}

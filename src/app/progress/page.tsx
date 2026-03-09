@@ -39,10 +39,10 @@ export default function ProgressPage() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Progress Graphs</h1>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <label className="text-sm text-zinc-600">Exercise</label>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <label className="text-sm text-[#9ab0bd]">Exercise</label>
         <select
-          className="mt-1 block rounded border border-black/20 px-2 py-1"
+          className="mt-1 block rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
           value={selectedExercise}
           onChange={(event) => setSelectedExercise(event.target.value as ExerciseKey)}
         >
@@ -54,28 +54,31 @@ export default function ProgressPage() {
         </select>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <div className="mb-3 text-sm text-zinc-600">{getExerciseName(selectedExercise)} trend</div>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="mb-3 text-sm text-[#9ab0bd]">{getExerciseName(selectedExercise)} trend</div>
         <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
+              <XAxis dataKey="date" stroke="#9ab0bd" />
+              <YAxis stroke="#9ab0bd" />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#24323a", borderColor: "#334753", color: "#ffffff" }}
+                labelStyle={{ color: "#ffffff" }}
+              />
               <Legend />
-              <Line type="monotone" dataKey="weight" stroke="#111827" strokeWidth={2} />
-              <Line type="monotone" dataKey="volume" stroke="#2563eb" strokeWidth={2} />
+              <Line type="monotone" dataKey="weight" stroke="#45bb7c" strokeWidth={2} />
+              <Line type="monotone" dataKey="volume" stroke="#7aa7ff" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <div className="text-sm text-zinc-500">Personal Records</div>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Personal Records</div>
         <div className="mt-2 grid gap-2 md:grid-cols-2">
           {personalRecords.map((record) => (
-            <div key={record.exerciseKey} className="rounded bg-zinc-50 p-3 text-sm">
+            <div key={record.exerciseKey} className="rounded bg-[#2b3a43] p-3 text-sm">
               <div className="font-medium">{getExerciseName(record.exerciseKey)}</div>
               <div>{`Max Weight: ${record.maxWeight}`}</div>
               <div>{`Best Volume: ${record.bestVolume}`}</div>
@@ -83,7 +86,7 @@ export default function ProgressPage() {
             </div>
           ))}
           {personalRecords.length === 0 ? (
-            <div className="rounded bg-zinc-50 p-3 text-sm text-zinc-600">No PRs yet.</div>
+            <div className="rounded bg-[#2b3a43] p-3 text-sm text-[#c7d7e0]">No PRs yet.</div>
           ) : null}
         </div>
       </div>

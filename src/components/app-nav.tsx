@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SignInButton, UserButton, useAuth } from "@clerk/nextjs";
@@ -17,9 +18,12 @@ export function AppNav() {
   const { isSignedIn } = useAuth();
 
   return (
-    <header className="border-b border-black/10">
+    <header className="border-b border-[#334753] bg-[#24323a]">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
-        <div className="text-xl font-bold">Git Swole</div>
+        <Link href="/" className="flex items-center gap-2">
+          <Image src="/gitswole.png" alt="Git Swole logo" width={36} height={36} className="rounded-md" priority />
+          <div className="text-xl font-bold">Git Swole</div>
+        </Link>
         <nav className="flex gap-2">
           {links.map((link) => {
             const selected = pathname === link.href;
@@ -28,7 +32,9 @@ export function AppNav() {
                 key={link.href}
                 href={link.href}
                 className={`rounded-md px-3 py-1.5 text-sm transition ${
-                  selected ? "bg-black text-white" : "bg-zinc-100 hover:bg-zinc-200"
+                  selected
+                    ? "bg-[#45bb7c] text-[#112019]"
+                    : "bg-[#2b3a43] text-white hover:bg-[#334753]"
                 }`}
               >
                 {link.label}
@@ -39,7 +45,9 @@ export function AppNav() {
         <div className="flex items-center">
           {!isSignedIn ? (
             <SignInButton mode="modal">
-              <button className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white">Sign in</button>
+              <button className="rounded-md bg-[#45bb7c] px-3 py-1.5 text-sm font-medium text-[#112019]">
+                Sign in
+              </button>
             </SignInButton>
           ) : (
             <UserButton />

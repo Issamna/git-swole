@@ -22,10 +22,10 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Settings</h1>
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <label className="text-sm text-zinc-600">Weight Units</label>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <label className="text-sm text-[#9ab0bd]">Weight Units</label>
         <select
-          className="mt-1 block rounded border border-black/20 px-2 py-1"
+          className="mt-1 block rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
           value={settings.units}
           onChange={(event) => updateSettings({ units: event.target.value as "lb" | "kg" })}
         >
@@ -34,10 +34,10 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <label className="text-sm text-zinc-600">Weight Increment</label>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <label className="text-sm text-[#9ab0bd]">Weight Increment</label>
         <select
-          className="mt-1 block rounded border border-black/20 px-2 py-1"
+          className="mt-1 block rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
           value={settings.weightIncrement}
           onChange={(event) =>
             updateSettings({ weightIncrement: Number(event.target.value) as 2.5 | 5 | 10 })
@@ -49,33 +49,33 @@ export default function SettingsPage() {
         </select>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <label className="text-sm text-zinc-600">Rest Timer Duration (seconds)</label>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <label className="text-sm text-[#9ab0bd]">Rest Timer Duration (seconds)</label>
         <input
-          className="mt-1 block w-full rounded border border-black/20 px-2 py-1"
+          className="mt-1 block w-full rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
           type="number"
           value={settings.restTimerSeconds}
           onChange={(event) => updateSettings({ restTimerSeconds: Number(event.target.value) })}
         />
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <label className="text-sm text-zinc-600">Bar Weight</label>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <label className="text-sm text-[#9ab0bd]">Bar Weight</label>
         <input
-          className="mt-1 block w-full rounded border border-black/20 px-2 py-1"
+          className="mt-1 block w-full rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
           type="number"
           value={settings.barbellWeight}
           onChange={(event) => updateSettings({ barbellWeight: Number(event.target.value) })}
         />
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <div className="text-sm text-zinc-600">Edit Workout A Exercises</div>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Edit Workout A Exercises</div>
         <div className="mt-2 grid gap-2 md:grid-cols-3">
           {settings.workoutAExercises.map((exercise, index) => (
             <select
               key={`A-${index}`}
-              className="rounded border border-black/20 px-2 py-1"
+              className="rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
               value={exercise}
               onChange={(event) => updateWorkoutExercise("A", index, event.target.value as ExerciseKey)}
             >
@@ -89,13 +89,13 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <div className="text-sm text-zinc-600">Edit Workout B Exercises</div>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Edit Workout B Exercises</div>
         <div className="mt-2 grid gap-2 md:grid-cols-3">
           {settings.workoutBExercises.map((exercise, index) => (
             <select
               key={`B-${index}`}
-              className="rounded border border-black/20 px-2 py-1"
+              className="rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
               value={exercise}
               onChange={(event) => updateWorkoutExercise("B", index, event.target.value as ExerciseKey)}
             >
@@ -109,14 +109,14 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl border border-black/10 bg-white p-4">
-        <div className="text-sm text-zinc-600">Exercise Database</div>
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Exercise Database</div>
         <div className="mt-2 space-y-2">
           {EXERCISES.map((exercise) => (
-            <div key={exercise.key} className="rounded bg-zinc-50 p-3">
+            <div key={exercise.key} className="rounded bg-[#2b3a43] p-3">
               <div className="font-medium">{exercise.name}</div>
-              <div className="text-sm text-zinc-600">{exercise.muscleGroup}</div>
-              <div className="text-sm text-zinc-700">{exercise.instructions}</div>
+              <div className="text-sm text-[#9ab0bd]">{exercise.muscleGroup}</div>
+              <div className="text-sm text-[#d7e4eb]">{exercise.instructions}</div>
             </div>
           ))}
         </div>
