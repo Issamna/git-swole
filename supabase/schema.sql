@@ -1,0 +1,201 @@
+create extension if not exists pgcrypto;
+
+create table if not exists public.users (
+  id text primary key,
+  units text not null default 'lb',
+  weight_increment numeric not null default 5,
+  rest_timer_seconds integer not null default 90,
+  barbell_weight numeric not null default 45,
+  workout_a_exercises text[] not null default array['squat', 'bench_press', 'barbell_row'],
+  workout_b_exercises text[] not null default array['squat', 'overhead_press', 'deadlift'],
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.progression (
+  user_id text primary key references public.users(id) on delete cascade,
+  next_workout_type text not null default 'A',
+  current_weights jsonb not null,
+  fail_streaks jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.workouts (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null references public.users(id) on delete cascade,
+  date timestamptz not null,
+  workout_type text not null,
+  note text
+);
+
+create table if not exists public.workout_sets (
+  id uuid primary key default gen_random_uuid(),
+  workout_id uuid not null references public.workouts(id) on delete cascade,
+  exercise_key text not null,
+  set_number integer not null,
+  reps integer not null,
+  weight numeric not null,
+  completed boolean not null default true
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'users_units_check'
+      and conrelid = 'public.users'::regclass
+  ) then
+    alter table public.users
+      add constraint users_units_check check (units in ('lb', 'kg'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'users_weight_increment_check'
+      and conrelid = 'public.users'::regclass
+  ) then
+    alter table public.users
+      add constraint users_weight_increment_check check (weight_increment in (2.5, 5, 10));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'users_rest_timer_check'
+      and conrelid = 'public.users'::regclass
+  ) then
+    alter table public.users
+      add constraint users_rest_timer_check check (rest_timer_seconds > 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'users_barbell_weight_check'
+      and conrelid = 'public.users'::regclass
+  ) then
+    alter table public.users
+      add constraint users_barbell_weight_check check (barbell_weight >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'progression_workout_type_check'
+      and conrelid = 'public.progression'::regclass
+  ) then
+    alter table public.progression
+      add constraint progression_workout_type_check check (next_workout_type in ('A', 'B'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'workouts_type_check'
+      and conrelid = 'public.workouts'::regclass
+  ) then
+    alter table public.workouts
+      add constraint workouts_type_check check (workout_type in ('A', 'B'));
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'workout_sets_reps_check'
+      and conrelid = 'public.workout_sets'::regclass
+  ) then
+    alter table public.workout_sets
+      add constraint workout_sets_reps_check check (reps >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'workout_sets_weight_check'
+      and conrelid = 'public.workout_sets'::regclass
+  ) then
+    alter table public.workout_sets
+      add constraint workout_sets_weight_check check (weight >= 0);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'workout_sets_set_number_check'
+      and conrelid = 'public.workout_sets'::regclass
+  ) then
+    alter table public.workout_sets
+      add constraint workout_sets_set_number_check check (set_number > 0);
+  end if;
+end
+$$;
+
+create unique index if not exists workout_sets_unique_set
+  on public.workout_sets (workout_id, exercise_key, set_number);
+
+create index if not exists workouts_user_date_idx
+  on public.workouts (user_id, date desc);
+
+create index if not exists workout_sets_workout_idx
+  on public.workout_sets (workout_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_users_updated_at on public.users;
+create trigger trg_users_updated_at
+before update on public.users
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_progression_updated_at on public.progression;
+create trigger trg_progression_updated_at
+before update on public.progression
+for each row execute function public.set_updated_at();
+
+alter table public.users enable row level security;
+alter table public.progression enable row level security;
+alter table public.workouts enable row level security;
+alter table public.workout_sets enable row level security;
+
+drop policy if exists "owner read users" on public.users;
+drop policy if exists "owner write users" on public.users;
+drop policy if exists "owner progression" on public.progression;
+drop policy if exists "owner workouts" on public.workouts;
+drop policy if exists "owner workout_sets" on public.workout_sets;
+
+create policy "owner read users" on public.users
+  for select using ((auth.jwt()->>'sub') = id);
+create policy "owner write users" on public.users
+  for all using ((auth.jwt()->>'sub') = id)
+  with check ((auth.jwt()->>'sub') = id);
+
+create policy "owner progression" on public.progression
+  for all using ((auth.jwt()->>'sub') = user_id)
+  with check ((auth.jwt()->>'sub') = user_id);
+
+create policy "owner workouts" on public.workouts
+  for all using ((auth.jwt()->>'sub') = user_id)
+  with check ((auth.jwt()->>'sub') = user_id);
+
+create policy "owner workout_sets" on public.workout_sets
+  for all using (
+    exists (
+      select 1 from public.workouts w
+      where w.id = workout_id and w.user_id = (auth.jwt()->>'sub')
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.workouts w
+      where w.id = workout_id and w.user_id = (auth.jwt()->>'sub')
+    )
+  );

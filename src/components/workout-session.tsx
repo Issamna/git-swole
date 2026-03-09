@@ -1,0 +1,201 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { getExerciseName, useWorkoutApp } from "@/context/workout-app-context";
+import { RestTimer } from "@/components/rest-timer";
+import { calculatePlates } from "@/lib/plates";
+import { generateWarmupSets } from "@/lib/warmup";
+
+type SetState = {
+  completedReps: number;
+  completed: boolean;
+  skipped: boolean;
+};
+
+export function WorkoutSession() {
+  const { settings, currentWeights, nextWorkoutExercises, completeWorkout } = useWorkoutApp();
+  const buildInitialSetStates = () => {
+    const initial: Record<string, SetState[]> = {};
+    for (const exercise of nextWorkoutExercises) {
+      const key = exercise.exerciseKey;
+      initial[key] = Array.from({ length: exercise.sets }).map(() => ({
+        completedReps: 0,
+        completed: false,
+        skipped: false,
+      }));
+    }
+    return initial;
+  };
+  const [restTick, setRestTick] = useState(0);
+  const [workoutNote, setWorkoutNote] = useState("");
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
+  const [setStates, setSetStates] = useState<Record<string, SetState[]>>(buildInitialSetStates);
+  const [weightOverrides, setWeightOverrides] = useState<Record<string, number>>({});
+
+  const activeExercise = nextWorkoutExercises[activeExerciseIndex];
+  const activeExerciseWeight = weightOverrides[activeExercise.exerciseKey] ?? currentWeights[activeExercise.exerciseKey];
+  const plates = calculatePlates(activeExerciseWeight, settings.barbellWeight);
+  const warmup = generateWarmupSets(activeExerciseWeight, settings.barbellWeight);
+
+  const isWorkoutReadyToFinish = useMemo(() => {
+    return nextWorkoutExercises.every((exercise) =>
+      setStates[exercise.exerciseKey]?.every((setState) => setState.completed || setState.skipped),
+    );
+  }, [nextWorkoutExercises, setStates]);
+
+  const updateSet = (exerciseKey: string, setIndex: number, nextSet: Partial<SetState>) => {
+    setSetStates((previous) => {
+      const cloned = [...(previous[exerciseKey] ?? [])];
+      cloned[setIndex] = { ...cloned[setIndex], ...nextSet };
+      return { ...previous, [exerciseKey]: cloned };
+    });
+  };
+
+  const finishWorkout = () => {
+    completeWorkout({
+      note: workoutNote || undefined,
+      exercises: nextWorkoutExercises.map((exercise) => ({
+        exerciseKey: exercise.exerciseKey,
+        weight: weightOverrides[exercise.exerciseKey] ?? currentWeights[exercise.exerciseKey],
+        setResults: setStates[exercise.exerciseKey].map((setResult, index) => ({
+          setNumber: index + 1,
+          targetReps: exercise.reps,
+          completedReps: setResult.completedReps,
+          completed: setResult.completed,
+          skipped: setResult.skipped,
+        })),
+      })),
+    });
+
+    setWorkoutNote("");
+    setActiveExerciseIndex(0);
+    setRestTick(0);
+    setSetStates(buildInitialSetStates());
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-black/10 p-4">
+        <div className="text-sm text-zinc-500">Current Exercise</div>
+        <div className="text-2xl font-semibold">{getExerciseName(activeExercise.exerciseKey)}</div>
+        <div className="mt-2">
+          <label className="text-sm">Working Weight ({settings.units})</label>
+          <input
+            className="mt-1 w-full rounded border border-black/20 px-3 py-2"
+            type="number"
+            value={activeExerciseWeight}
+            onChange={(event) =>
+              setWeightOverrides((previous) => ({
+                ...previous,
+                [activeExercise.exerciseKey]: Number(event.target.value),
+              }))
+            }
+          />
+        </div>
+        <div className="mt-3 text-sm text-zinc-600">
+          {activeExercise.sets} sets x {activeExercise.reps} reps
+        </div>
+      </div>
+
+      <RestTimer defaultSeconds={settings.restTimerSeconds} autoStartToken={restTick} />
+
+      <div className="rounded-xl border border-black/10 p-4">
+        <div className="text-sm text-zinc-500">Sets</div>
+        <div className="mt-2 space-y-2">
+          {setStates[activeExercise.exerciseKey].map((setState, index) => (
+            <div key={index} className="grid grid-cols-[64px_1fr_auto_auto] items-center gap-2">
+              <div className="text-sm">Set {index + 1}</div>
+              <input
+                className="rounded border border-black/20 px-2 py-1 text-sm"
+                type="number"
+                placeholder="reps"
+                value={setState.completedReps || ""}
+                onChange={(event) =>
+                  updateSet(activeExercise.exerciseKey, index, {
+                    completedReps: Number(event.target.value),
+                  })
+                }
+              />
+              <button
+                className={`rounded px-2 py-1 text-xs ${
+                  setState.completed ? "bg-green-600 text-white" : "bg-zinc-100"
+                }`}
+                onClick={() => {
+                  updateSet(activeExercise.exerciseKey, index, {
+                    completed: true,
+                    skipped: false,
+                    completedReps:
+                      setStates[activeExercise.exerciseKey][index].completedReps || activeExercise.reps,
+                  });
+                  setRestTick((previous) => previous + 1);
+                }}
+              >
+                Complete
+              </button>
+              <button
+                className={`rounded px-2 py-1 text-xs ${
+                  setState.skipped ? "bg-amber-500 text-white" : "bg-zinc-100"
+                }`}
+                onClick={() => {
+                  updateSet(activeExercise.exerciseKey, index, {
+                    skipped: true,
+                    completed: false,
+                  });
+                }}
+              >
+                Skip
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            className="rounded border border-black/20 px-3 py-1.5 text-sm"
+            onClick={() => setActiveExerciseIndex((previous) => Math.max(previous - 1, 0))}
+          >
+            Prev Exercise
+          </button>
+          <button
+            className="rounded border border-black/20 px-3 py-1.5 text-sm"
+            onClick={() =>
+              setActiveExerciseIndex((previous) => Math.min(previous + 1, nextWorkoutExercises.length - 1))
+            }
+          >
+            Next Exercise
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-black/10 p-4">
+          <div className="text-sm text-zinc-500">Plate Calculator</div>
+          <div className="mt-1 text-sm">{plates.length > 0 ? `Per side: ${plates.join(" / ")}` : "Bar only"}</div>
+        </div>
+        <div className="rounded-xl border border-black/10 p-4">
+          <div className="text-sm text-zinc-500">Warmup</div>
+          <div className="mt-1 text-sm">
+            {warmup.map((set) => `${set.weight} x${set.reps}`).join("  |  ")}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-black/10 p-4">
+        <div className="text-sm text-zinc-500">Workout Notes</div>
+        <textarea
+          className="mt-2 min-h-20 w-full rounded border border-black/20 px-3 py-2"
+          placeholder="How did it feel?"
+          value={workoutNote}
+          onChange={(event) => setWorkoutNote(event.target.value)}
+        />
+      </div>
+
+      <button
+        className="w-full rounded-lg bg-black px-4 py-2 text-white disabled:bg-zinc-300"
+        disabled={!isWorkoutReadyToFinish}
+        onClick={finishWorkout}
+      >
+        Finish Workout
+      </button>
+    </div>
+  );
+}
