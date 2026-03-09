@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getExerciseName, useWorkoutApp } from "@/context/workout-app-context";
 import { RestTimer } from "@/components/rest-timer";
 import { calculatePlates } from "@/lib/plates";
+import { WorkoutSummary } from "@/lib/types";
 import { generateWarmupSets } from "@/lib/warmup";
 
 type SetState = {
@@ -12,9 +13,20 @@ type SetState = {
   skipped: boolean;
 };
 
+type WorkoutDraft = {
+  nextWorkoutType: "A" | "B";
+  activeExerciseIndex: number;
+  workoutNote: string;
+  workoutSummary?: WorkoutSummary;
+  setStates: Record<string, SetState[]>;
+  weightOverrides: Record<string, number>;
+};
+
+const WORKOUT_DRAFT_KEY = "git-swole-workout-draft-v1";
+
 export function WorkoutSession() {
-  const { settings, currentWeights, nextWorkoutExercises, completeWorkout } = useWorkoutApp();
-  const buildInitialSetStates = () => {
+  const { settings, currentWeights, nextWorkoutExercises, nextWorkoutType, completeWorkout } = useWorkoutApp();
+  const buildInitialSetStates = useCallback(() => {
     const initial: Record<string, SetState[]> = {};
     for (const exercise of nextWorkoutExercises) {
       const key = exercise.exerciseKey;
@@ -25,10 +37,12 @@ export function WorkoutSession() {
       }));
     }
     return initial;
-  };
+  }, [nextWorkoutExercises]);
   const [restTick, setRestTick] = useState(0);
   const [workoutNote, setWorkoutNote] = useState("");
+  const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummary | undefined>(undefined);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const [setStates, setSetStates] = useState<Record<string, SetState[]>>(buildInitialSetStates);
   const [weightOverrides, setWeightOverrides] = useState<Record<string, number>>({});
 
@@ -51,9 +65,90 @@ export function WorkoutSession() {
     });
   };
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const raw = window.localStorage.getItem(WORKOUT_DRAFT_KEY);
+    if (!raw) {
+      setDraftLoaded(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as WorkoutDraft;
+      if (parsed.nextWorkoutType !== nextWorkoutType) {
+        setDraftLoaded(true);
+        return;
+      }
+
+      const initial = buildInitialSetStates();
+      const mergedSetStates: Record<string, SetState[]> = { ...initial };
+      for (const [exerciseKey, sets] of Object.entries(parsed.setStates ?? {})) {
+        if (!mergedSetStates[exerciseKey]) {
+          continue;
+        }
+        mergedSetStates[exerciseKey] = mergedSetStates[exerciseKey].map((setState, idx) => ({
+          ...setState,
+          ...(sets[idx] ?? {}),
+        }));
+      }
+
+      setSetStates(mergedSetStates);
+      setWorkoutNote(parsed.workoutNote ?? "");
+      setWorkoutSummary(parsed.workoutSummary);
+      setWeightOverrides(parsed.weightOverrides ?? {});
+      setActiveExerciseIndex(
+        Math.min(Math.max(parsed.activeExerciseIndex ?? 0, 0), nextWorkoutExercises.length - 1),
+      );
+    } catch {
+      // Ignore invalid draft payload and continue fresh.
+    } finally {
+      setDraftLoaded(true);
+    }
+  }, [buildInitialSetStates, nextWorkoutExercises.length, nextWorkoutType]);
+
+  useEffect(() => {
+    if (!draftLoaded || typeof window === "undefined") {
+      return;
+    }
+
+    const draft: WorkoutDraft = {
+      nextWorkoutType,
+      activeExerciseIndex,
+      workoutNote,
+      workoutSummary,
+      setStates,
+      weightOverrides,
+    };
+    window.localStorage.setItem(WORKOUT_DRAFT_KEY, JSON.stringify(draft));
+  }, [activeExerciseIndex, draftLoaded, nextWorkoutType, setStates, weightOverrides, workoutNote, workoutSummary]);
+
+  const clearDraft = () => {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(WORKOUT_DRAFT_KEY);
+    }
+  };
+
+  const resetSession = () => {
+    setWorkoutNote("");
+    setWorkoutSummary(undefined);
+    setActiveExerciseIndex(0);
+    setRestTick(0);
+    setWeightOverrides({});
+    setSetStates(buildInitialSetStates());
+  };
+
+  const discardDraft = () => {
+    clearDraft();
+    resetSession();
+  };
+
   const finishWorkout = () => {
     completeWorkout({
       note: workoutNote || undefined,
+      summary: workoutSummary,
       exercises: nextWorkoutExercises.map((exercise) => ({
         exerciseKey: exercise.exerciseKey,
         weight: weightOverrides[exercise.exerciseKey] ?? currentWeights[exercise.exerciseKey],
@@ -67,10 +162,8 @@ export function WorkoutSession() {
       })),
     });
 
-    setWorkoutNote("");
-    setActiveExerciseIndex(0);
-    setRestTick(0);
-    setSetStates(buildInitialSetStates());
+    clearDraft();
+    resetSession();
   };
 
   return (
@@ -111,9 +204,15 @@ export function WorkoutSession() {
                 placeholder="reps"
                 value={setState.completedReps || ""}
                 onChange={(event) =>
-                  updateSet(activeExercise.exerciseKey, index, {
-                    completedReps: Number(event.target.value),
-                  })
+                  {
+                    const completedReps = Number(event.target.value);
+                    const hasReps = completedReps > 0;
+                    updateSet(activeExercise.exerciseKey, index, {
+                      completedReps,
+                      completed: hasReps,
+                      skipped: hasReps ? false : setState.skipped,
+                    });
+                  }
                 }
               />
               <button
@@ -176,6 +275,24 @@ export function WorkoutSession() {
       </div>
 
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+        <div className="text-sm text-[#9ab0bd]">Workout Summary</div>
+        <div className="mt-2 flex gap-2">
+          <button
+            className={`rounded px-3 py-1.5 text-sm ${workoutSummary === "up" ? "bg-[#45bb7c] font-medium text-[#112019]" : "bg-[#2b3a43]"}`}
+            onClick={() => setWorkoutSummary((previous) => (previous === "up" ? undefined : "up"))}
+          >
+            👍 Good
+          </button>
+          <button
+            className={`rounded px-3 py-1.5 text-sm ${workoutSummary === "down" ? "bg-[#45bb7c] font-medium text-[#112019]" : "bg-[#2b3a43]"}`}
+            onClick={() => setWorkoutSummary((previous) => (previous === "down" ? undefined : "down"))}
+          >
+            👎 Tough
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
         <div className="text-sm text-[#9ab0bd]">Workout Notes</div>
         <textarea
           className="mt-2 min-h-20 w-full rounded border border-[#334753] bg-[#2b3a43] px-3 py-2"
@@ -191,6 +308,12 @@ export function WorkoutSession() {
         onClick={finishWorkout}
       >
         Finish Workout
+      </button>
+      <button
+        className="w-full rounded-lg border border-[#334753] bg-[#2b3a43] px-4 py-2 text-sm"
+        onClick={discardDraft}
+      >
+        Discard Session Draft
       </button>
     </div>
   );

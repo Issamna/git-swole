@@ -41,7 +41,10 @@ export default function HistoryPage() {
             onClick={() => setExpandedId((previous) => (previous === workout.id ? null : workout.id))}
           >
             <div className="text-sm text-[#9ab0bd]">{new Date(workout.date).toLocaleDateString()}</div>
-            <div className="font-semibold">{`Workout ${workout.workoutType}`}</div>
+            <div className="font-semibold">
+              {`Workout ${workout.workoutType}`}{" "}
+              {workout.workoutSummary === "up" ? "👍" : workout.workoutSummary === "down" ? "👎" : ""}
+            </div>
             <div className="text-sm text-[#c7d7e0]">
               {workout.exercises
                 .map((exercise) => `${getExerciseName(exercise.exerciseKey)} ${exercise.weight}`)
@@ -50,6 +53,9 @@ export default function HistoryPage() {
           </button>
           {expandedId === workout.id ? (
             <div className="mt-3 space-y-3">
+              {workout.workoutNote ? (
+                <div className="rounded bg-[#2b3a43] p-3 text-sm text-[#d7e4eb]">{workout.workoutNote}</div>
+              ) : null}
               {workout.exercises.map((exercise, exerciseIndex) => (
                 <div key={exercise.exerciseKey}>
                   <div className="text-sm font-medium">{getExerciseName(exercise.exerciseKey)}</div>

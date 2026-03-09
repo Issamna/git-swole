@@ -7,6 +7,7 @@ export type ExerciseKey =
 
 export type WorkoutType = "A" | "B";
 export type WeightUnit = "lb" | "kg";
+export type WorkoutSummary = "up" | "down";
 
 export type ExerciseDefinition = {
   key: ExerciseKey;
@@ -49,6 +50,7 @@ export type WorkoutLog = {
   date: string;
   workoutType: WorkoutType;
   workoutNote?: string;
+  workoutSummary?: WorkoutSummary;
   exercises: WorkoutExerciseLog[];
 };
 

@@ -1,7 +1,7 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useAuth, useUser } from "@clerk/nextjs";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { applyWorkoutProgression } from "@/lib/progression";
 import { EXERCISE_BY_KEY } from "@/lib/program";
 import {
@@ -14,23 +14,37 @@ import {
   replaceWorkoutSetsInSupabase,
   syncFromSupabase,
 } from "@/lib/storage";
-import { AppSettings, ExerciseKey, PersonalRecord, WorkoutExerciseLog, WorkoutLog } from "@/lib/types";
+import {
+  AppSettings,
+  ExerciseKey,
+  PersonalRecord,
+  WorkoutExerciseLog,
+  WorkoutLog,
+  WorkoutSummary,
+} from "@/lib/types";
 
 type WorkoutAppContextValue = {
   stateLoaded: boolean;
+  syncStatus: "local" | "syncing" | "synced" | "error";
+  syncError: string | null;
   nextWorkoutType: "A" | "B";
   settings: AppSettings;
   nextWorkoutExercises: { exerciseKey: ExerciseKey; sets: number; reps: number }[];
   currentWeights: Record<ExerciseKey, number>;
   workoutLogs: WorkoutLog[];
   personalRecords: PersonalRecord[];
-  completeWorkout: (params: { exercises: WorkoutExerciseLog[]; note?: string }) => void;
+  completeWorkout: (params: {
+    exercises: WorkoutExerciseLog[];
+    note?: string;
+    summary?: WorkoutSummary;
+  }) => void;
   updateSettings: (nextSettings: Partial<AppSettings>) => void;
   deleteWorkout: (workoutId: string) => void;
   updateWorkout: (updatedWorkout: WorkoutLog) => void;
 };
 
 const WorkoutAppContext = createContext<WorkoutAppContextValue | null>(null);
+const SYNC_TIMEOUT_MS = 10000;
 
 function computePersonalRecords(logs: WorkoutLog[]): PersonalRecord[] {
   const records = new Map<ExerciseKey, PersonalRecord>();
@@ -65,8 +79,70 @@ function computePersonalRecords(logs: WorkoutLog[]): PersonalRecord[] {
 
 export function WorkoutAppProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
+  const { getToken } = useAuth();
   const [state, setState] = useState(DEFAULT_APP_STATE);
   const [stateLoaded, setStateLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<"local" | "syncing" | "synced" | "error">("local");
+  const [syncError, setSyncError] = useState<string | null>(null);
+
+  const getSupabaseToken = useCallback(async () => {
+    try {
+      // Preferred for Clerk+Supabase JWKS integration.
+      const sessionToken = await getToken();
+      if (sessionToken) {
+        return sessionToken;
+      }
+    } catch (error) {
+      console.warn("Failed to retrieve Clerk session token for Supabase sync.", error);
+    }
+
+    try {
+      // Backward compatibility for template-based setups.
+      const templateToken = await getToken({ template: "supabase" });
+      if (templateToken) {
+        return templateToken;
+      }
+    } catch (error) {
+      console.warn("Failed to retrieve Clerk 'supabase' template token.", error);
+    }
+
+    const message =
+      "Could not get Clerk token for Supabase. If using JWKS, verify Clerk is configured as Supabase JWT provider.";
+    setSyncStatus("error");
+    setSyncError(message);
+    return null;
+  }, [getToken]);
+
+  const runSupabaseTask = useCallback(
+    async (task: (token: string) => Promise<{ ok: boolean; error?: string }>) => {
+      const token = await getSupabaseToken();
+      if (!token) {
+        return;
+      }
+      setSyncStatus("syncing");
+      setSyncError(null);
+      try {
+        const result = await Promise.race([
+          task(token),
+          new Promise<{ ok: false; error: string }>((resolve) => {
+            window.setTimeout(() => resolve({ ok: false, error: "Sync timed out after 10 seconds." }), SYNC_TIMEOUT_MS);
+          }),
+        ]);
+        if (result.ok) {
+          setSyncStatus("synced");
+          setSyncError(null);
+        } else {
+          setSyncStatus("error");
+          setSyncError(result.error || "Sync failed.");
+        }
+      } catch (error) {
+        console.error("Supabase task failed", error);
+        setSyncStatus("error");
+        setSyncError(error instanceof Error ? error.message : "Unexpected sync task failure.");
+      }
+    },
+    [getSupabaseToken],
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -83,13 +159,33 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
       return;
     }
 
-    void syncFromSupabase(user.id).then((remoteState) => {
-      if (!remoteState) {
-        return;
+    void (async () => {
+      setSyncStatus("syncing");
+      setSyncError(null);
+      const token = await getSupabaseToken();
+      if (!token) return;
+      try {
+        const result = await Promise.race([
+          syncFromSupabase(user.id, token),
+          new Promise<{ ok: false; error: string }>((resolve) => {
+            window.setTimeout(() => resolve({ ok: false, error: "Initial sync timed out after 10 seconds." }), SYNC_TIMEOUT_MS);
+          }),
+        ]);
+        if (!result.ok || !result.data) {
+          setSyncStatus("error");
+          setSyncError(!result.ok ? result.error : "Initial sync failed.");
+          return;
+        }
+        setState(result.data);
+        setSyncStatus("synced");
+        setSyncError(null);
+      } catch (error) {
+        console.error("Initial Supabase sync failed", error);
+        setSyncStatus("error");
+        setSyncError(error instanceof Error ? error.message : "Unexpected initial sync failure.");
       }
-      setState(remoteState);
-    });
-  }, [stateLoaded, user?.id]);
+    })();
+  }, [getSupabaseToken, stateLoaded, user?.id]);
 
   useEffect(() => {
     if (!stateLoaded) {
@@ -97,9 +193,33 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     }
     persistLocalState(state);
     if (user?.id) {
-      void persistSupabaseState(user.id, state);
+      void (async () => {
+        const token = await getSupabaseToken();
+        if (!token) {
+          return;
+        }
+        try {
+          const result = await Promise.race([
+            persistSupabaseState(user.id, state, token),
+            new Promise<{ ok: false; error: string }>((resolve) => {
+              window.setTimeout(() => resolve({ ok: false, error: "State sync timed out after 10 seconds." }), SYNC_TIMEOUT_MS);
+            }),
+          ]);
+          if (result.ok) {
+            setSyncStatus("synced");
+            setSyncError(null);
+          } else {
+            setSyncStatus("error");
+            setSyncError(result.error || "State sync failed.");
+          }
+        } catch (error) {
+          console.error("Supabase state persist task failed", error);
+          setSyncStatus("error");
+          setSyncError(error instanceof Error ? error.message : "Unexpected state sync failure.");
+        }
+      })();
     }
-  }, [state, stateLoaded, user?.id]);
+  }, [getSupabaseToken, state, stateLoaded, user?.id]);
 
   const nextWorkoutExercises = useMemo(() => {
     if (state.progression.nextWorkoutType === "A") {
@@ -116,18 +236,27 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     }));
   }, [state.progression.nextWorkoutType, state.settings.workoutAExercises, state.settings.workoutBExercises]);
 
-  const completeWorkout = ({ exercises, note }: { exercises: WorkoutExerciseLog[]; note?: string }) => {
+  const completeWorkout = ({
+    exercises,
+    note,
+    summary,
+  }: {
+    exercises: WorkoutExerciseLog[];
+    note?: string;
+    summary?: WorkoutSummary;
+  }) => {
     const nextLog: WorkoutLog = {
       id: crypto.randomUUID(),
       userId: user?.id ?? "local",
       date: new Date().toISOString(),
       workoutType: state.progression.nextWorkoutType,
       workoutNote: note,
+      workoutSummary: summary,
       exercises,
     };
 
     if (user?.id) {
-      void persistWorkoutToSupabase(nextLog);
+      void runSupabaseTask((token) => persistWorkoutToSupabase(nextLog, token));
     }
 
     setState((previous) => {
@@ -156,7 +285,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
 
   const deleteWorkout = (workoutId: string) => {
     if (user?.id) {
-      void deleteWorkoutFromSupabase(workoutId);
+      void runSupabaseTask((token) => deleteWorkoutFromSupabase(workoutId, token));
     }
     setState((previous) => ({
       ...previous,
@@ -166,7 +295,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
 
   const updateWorkout = (updatedWorkout: WorkoutLog) => {
     if (user?.id) {
-      void replaceWorkoutSetsInSupabase(updatedWorkout);
+      void runSupabaseTask((token) => replaceWorkoutSetsInSupabase(updatedWorkout, token));
     }
     setState((previous) => ({
       ...previous,
@@ -180,6 +309,8 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
 
   const value: WorkoutAppContextValue = {
     stateLoaded,
+    syncStatus,
+    syncError,
     nextWorkoutType: state.progression.nextWorkoutType,
     settings: state.settings,
     nextWorkoutExercises,
