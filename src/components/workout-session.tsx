@@ -31,7 +31,7 @@ export function WorkoutSession() {
     for (const exercise of nextWorkoutExercises) {
       const key = exercise.exerciseKey;
       initial[key] = Array.from({ length: exercise.sets }).map(() => ({
-        completedReps: 0,
+        completedReps: exercise.reps,
         completed: false,
         skipped: false,
       }));
@@ -202,7 +202,7 @@ export function WorkoutSession() {
                 className="rounded border border-[#334753] bg-[#2b3a43] px-2 py-1 text-sm"
                 type="number"
                 placeholder="reps"
-                value={setState.completedReps || ""}
+                value={setState.completedReps}
                 onChange={(event) =>
                   {
                     const completedReps = Number(event.target.value);
