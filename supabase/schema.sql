@@ -31,12 +31,35 @@ create table if not exists public.workouts (
 create table if not exists public.workout_sets (
   id uuid primary key default gen_random_uuid(),
   workout_id uuid not null references public.workouts(id) on delete cascade,
-  exercise_key text not null,
+  exercise_id uuid,
+  exercise_key text,
+  exercise_name text,
   set_number integer not null,
   reps integer not null,
   weight numeric not null,
   completed boolean not null default true
 );
+
+create table if not exists public.exercises (
+  id uuid primary key default gen_random_uuid(),
+  slug text not null unique,
+  name text not null,
+  primary_muscle text not null,
+  secondary_muscles text[] not null default '{}',
+  equipment text not null,
+  movement_pattern text not null,
+  description text not null,
+  is_global boolean not null default false,
+  created_by text references public.users(id) on delete cascade,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.workout_sets
+  add column if not exists exercise_id uuid;
+alter table public.workout_sets
+  add column if not exists exercise_name text;
 
 do $$
 begin
@@ -129,17 +152,60 @@ begin
     alter table public.workout_sets
       add constraint workout_sets_set_number_check check (set_number > 0);
   end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'workout_sets'
+      and column_name = 'exercise_key'
+      and is_nullable = 'NO'
+  ) then
+    alter table public.workout_sets
+      alter column exercise_key drop not null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'workout_sets_exercise_id_fkey'
+      and conrelid = 'public.workout_sets'::regclass
+  ) then
+    alter table public.workout_sets
+      add constraint workout_sets_exercise_id_fkey
+      foreign key (exercise_id) references public.exercises(id) on delete set null;
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'exercises_owner_global_check'
+      and conrelid = 'public.exercises'::regclass
+  ) then
+    alter table public.exercises
+      add constraint exercises_owner_global_check check (
+        (is_global = true and created_by is null) or
+        (is_global = false and created_by is not null)
+      );
+  end if;
 end
 $$;
 
-create unique index if not exists workout_sets_unique_set
-  on public.workout_sets (workout_id, exercise_key, set_number);
+drop index if exists workout_sets_unique_set;
+create unique index workout_sets_unique_set
+  on public.workout_sets (workout_id, coalesce(exercise_id::text, exercise_key, exercise_name), set_number);
 
 create index if not exists workouts_user_date_idx
   on public.workouts (user_id, date desc);
 
 create index if not exists workout_sets_workout_idx
   on public.workout_sets (workout_id);
+
+create index if not exists exercises_global_idx
+  on public.exercises (is_global, is_active, name);
+
+create index if not exists exercises_owner_idx
+  on public.exercises (created_by, is_active, name);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -161,16 +227,26 @@ create trigger trg_progression_updated_at
 before update on public.progression
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_exercises_updated_at on public.exercises;
+create trigger trg_exercises_updated_at
+before update on public.exercises
+for each row execute function public.set_updated_at();
+
 alter table public.users enable row level security;
 alter table public.progression enable row level security;
 alter table public.workouts enable row level security;
 alter table public.workout_sets enable row level security;
+alter table public.exercises enable row level security;
 
 drop policy if exists "owner read users" on public.users;
 drop policy if exists "owner write users" on public.users;
 drop policy if exists "owner progression" on public.progression;
 drop policy if exists "owner workouts" on public.workouts;
 drop policy if exists "owner workout_sets" on public.workout_sets;
+drop policy if exists "read exercises" on public.exercises;
+drop policy if exists "insert user exercises" on public.exercises;
+drop policy if exists "update user exercises" on public.exercises;
+drop policy if exists "delete user exercises" on public.exercises;
 
 create policy "owner read users" on public.users
   for select using ((auth.jwt()->>'sub') = id);
@@ -199,3 +275,22 @@ create policy "owner workout_sets" on public.workout_sets
       where w.id = workout_id and w.user_id = (auth.jwt()->>'sub')
     )
   );
+
+create policy "read exercises" on public.exercises
+  for select using (
+    is_active = true and (
+      is_global = true or created_by = (auth.jwt()->>'sub')
+    )
+  );
+
+create policy "insert user exercises" on public.exercises
+  for insert with check (
+    is_global = false and created_by = (auth.jwt()->>'sub')
+  );
+
+create policy "update user exercises" on public.exercises
+  for update using (is_global = false and created_by = (auth.jwt()->>'sub'))
+  with check (is_global = false and created_by = (auth.jwt()->>'sub'));
+
+create policy "delete user exercises" on public.exercises
+  for delete using (is_global = false and created_by = (auth.jwt()->>'sub'));

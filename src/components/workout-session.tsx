@@ -151,6 +151,7 @@ export function WorkoutSession() {
       summary: workoutSummary,
       exercises: nextWorkoutExercises.map((exercise) => ({
         exerciseKey: exercise.exerciseKey,
+        exerciseName: getExerciseName(exercise.exerciseKey),
         weight: weightOverrides[exercise.exerciseKey] ?? currentWeights[exercise.exerciseKey],
         setResults: setStates[exercise.exerciseKey].map((setResult, index) => ({
           setNumber: index + 1,

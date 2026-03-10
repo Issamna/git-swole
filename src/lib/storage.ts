@@ -1,6 +1,13 @@
 import { DEFAULT_PROGRESSION } from "@/lib/progression";
-import { ExerciseKey, WorkoutAppState, WorkoutLog, WorkoutSummary } from "@/lib/types";
+import {
+  ExerciseCatalogItem,
+  ExerciseKey,
+  WorkoutAppState,
+  WorkoutLog,
+  WorkoutSummary,
+} from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
+import { EXERCISE_BY_KEY } from "@/lib/program";
 
 export const LOCAL_STATE_KEY = "git-swole-state-v1";
 export type SyncResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
@@ -120,7 +127,7 @@ export async function syncFromSupabase(
       supabase.from("users").select("*").eq("id", userId).single(),
       supabase
         .from("workouts")
-        .select("id,date,workout_type,note,workout_sets(exercise_key,weight,reps,completed,set_number)")
+      .select("id,date,workout_type,note,workout_sets(exercise_id,exercise_key,exercise_name,weight,reps,completed,set_number)")
         .eq("user_id", userId)
         .order("date", { ascending: false }),
     ]);
@@ -138,10 +145,16 @@ export async function syncFromSupabase(
     const logs: WorkoutLog[] = (workoutsRes.data ?? []).map((workout) => {
       const grouped = new Map<string, WorkoutLog["exercises"][number]>();
       for (const set of workout.workout_sets ?? []) {
-        const existing = grouped.get(set.exercise_key);
+      const mapKey = set.exercise_id ?? set.exercise_key ?? set.exercise_name ?? `set-${set.set_number}`;
+      const existing = grouped.get(mapKey);
         if (!existing) {
-          grouped.set(set.exercise_key, {
-            exerciseKey: set.exercise_key,
+        grouped.set(mapKey, {
+          exerciseKey: set.exercise_key ?? undefined,
+          exerciseId: set.exercise_id ?? undefined,
+          exerciseName:
+            set.exercise_name ??
+            (set.exercise_key ? EXERCISE_BY_KEY[set.exercise_key as ExerciseKey]?.name : undefined) ??
+            "Unknown Exercise",
             weight: set.weight,
             setResults: [
               {
@@ -264,7 +277,9 @@ export async function persistWorkoutToSupabase(
   const setRows = workout.exercises.flatMap((exercise) =>
     exercise.setResults.map((setResult) => ({
       workout_id: workout.id,
-      exercise_key: exercise.exerciseKey,
+      exercise_id: exercise.exerciseId ?? null,
+      exercise_key: exercise.exerciseKey ?? null,
+      exercise_name: exercise.exerciseName,
       set_number: setResult.setNumber,
       reps: setResult.completedReps,
       weight: exercise.weight,
@@ -319,7 +334,9 @@ export async function replaceWorkoutSetsInSupabase(
   const setRows = workout.exercises.flatMap((exercise) =>
     exercise.setResults.map((setResult) => ({
       workout_id: workout.id,
-      exercise_key: exercise.exerciseKey,
+      exercise_id: exercise.exerciseId ?? null,
+      exercise_key: exercise.exerciseKey ?? null,
+      exercise_name: exercise.exerciseName,
       set_number: setResult.setNumber,
       reps: setResult.completedReps,
       weight: exercise.weight,
@@ -343,4 +360,103 @@ export async function replaceWorkoutSetsInSupabase(
     };
   }
   return { ok: true };
+}
+
+export async function fetchExercisesFromSupabase(
+  userId: string,
+  accessToken?: string,
+): Promise<SyncResult<ExerciseCatalogItem[]>> {
+  const supabase = getSupabaseClient(accessToken);
+  if (!supabase) {
+    return { ok: false, error: "Supabase client is not configured." };
+  }
+
+  const { data, error } = await supabase
+    .from("exercises")
+    .select(
+      "id,slug,name,primary_muscle,secondary_muscles,equipment,movement_pattern,description,is_global,created_by",
+    )
+    .or(`is_global.eq.true,created_by.eq.${userId}`)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  return {
+    ok: true,
+    data: (data ?? []).map((item) => ({
+      id: item.id,
+      slug: item.slug,
+      name: item.name,
+      primaryMuscle: item.primary_muscle,
+      secondaryMuscles: item.secondary_muscles ?? [],
+      equipment: item.equipment,
+      movementPattern: item.movement_pattern,
+      description: item.description,
+      ownership: item.is_global ? "global" : "user",
+    })),
+  };
+}
+
+function slugify(name: string) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+export async function upsertUserExerciseInSupabase(
+  userId: string,
+  input: Omit<ExerciseCatalogItem, "id" | "ownership" | "slug"> & { slug?: string },
+  accessToken?: string,
+): Promise<SyncResult<ExerciseCatalogItem>> {
+  const supabase = getSupabaseClient(accessToken);
+  if (!supabase) {
+    return { ok: false, error: "Supabase client is not configured." };
+  }
+
+  const slug = input.slug?.trim() || `${slugify(input.name)}-${userId.slice(-6).toLowerCase()}`;
+  const { data, error } = await supabase
+    .from("exercises")
+    .upsert(
+      {
+        slug,
+        name: input.name,
+        primary_muscle: input.primaryMuscle,
+        secondary_muscles: input.secondaryMuscles,
+        equipment: input.equipment,
+        movement_pattern: input.movementPattern,
+        description: input.description,
+        is_global: false,
+        created_by: userId,
+        is_active: true,
+      },
+      { onConflict: "slug" },
+    )
+    .select(
+      "id,slug,name,primary_muscle,secondary_muscles,equipment,movement_pattern,description,is_global,created_by",
+    )
+    .single();
+
+  if (error || !data) {
+    return { ok: false, error: error?.message ?? "Failed to upsert user exercise." };
+  }
+
+  return {
+    ok: true,
+    data: {
+      id: data.id,
+      slug: data.slug,
+      name: data.name,
+      primaryMuscle: data.primary_muscle,
+      secondaryMuscles: data.secondary_muscles ?? [],
+      equipment: data.equipment,
+      movementPattern: data.movement_pattern,
+      description: data.description,
+      ownership: "user",
+    },
+  };
 }

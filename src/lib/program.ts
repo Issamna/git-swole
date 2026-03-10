@@ -37,6 +37,10 @@ export const EXERCISE_BY_KEY = Object.fromEntries(
   EXERCISES.map((exercise) => [exercise.key, exercise]),
 ) as Record<ExerciseKey, ExerciseDefinition>;
 
+export const EXERCISE_KEY_BY_NAME = Object.fromEntries(
+  EXERCISES.map((exercise) => [exercise.name.toLowerCase(), exercise.key]),
+) as Record<string, ExerciseKey>;
+
 export const DEFAULT_WORKOUT_A: WorkoutTemplate = {
   type: "A",
   name: "Workout A",

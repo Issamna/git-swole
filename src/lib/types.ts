@@ -8,6 +8,7 @@ export type ExerciseKey =
 export type WorkoutType = "A" | "B";
 export type WeightUnit = "lb" | "kg";
 export type WorkoutSummary = "up" | "down";
+export type ExerciseOwnership = "global" | "user";
 
 export type ExerciseDefinition = {
   key: ExerciseKey;
@@ -15,6 +16,18 @@ export type ExerciseDefinition = {
   muscleGroup: string;
   instructions: string;
   imageUrl?: string;
+};
+
+export type ExerciseCatalogItem = {
+  id: string;
+  slug: string;
+  name: string;
+  primaryMuscle: string;
+  secondaryMuscles: string[];
+  equipment: string;
+  movementPattern: string;
+  description: string;
+  ownership: ExerciseOwnership;
 };
 
 export type ProgramExercise = {
@@ -38,7 +51,9 @@ export type WorkoutSetResult = {
 };
 
 export type WorkoutExerciseLog = {
-  exerciseKey: ExerciseKey;
+  exerciseKey?: ExerciseKey;
+  exerciseName: string;
+  exerciseId?: string;
   weight: number;
   setResults: WorkoutSetResult[];
   note?: string;

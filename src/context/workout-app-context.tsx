@@ -9,15 +9,18 @@ import { EXERCISE_BY_KEY } from "@/lib/program";
 import {
   DEFAULT_APP_STATE,
   deleteWorkoutFromSupabase,
+  fetchExercisesFromSupabase,
   loadLocalState,
   persistLocalState,
   persistWorkoutToSupabase,
   persistSupabaseState,
   replaceWorkoutSetsInSupabase,
   syncFromSupabase,
+  upsertUserExerciseInSupabase,
 } from "@/lib/storage";
 import {
   AppSettings,
+  ExerciseCatalogItem,
   ExerciseKey,
   PersonalRecord,
   WorkoutExerciseLog,
@@ -33,6 +36,7 @@ type WorkoutAppContextValue = {
   settings: AppSettings;
   nextWorkoutExercises: { exerciseKey: ExerciseKey; sets: number; reps: number }[];
   currentWeights: Record<ExerciseKey, number>;
+  exerciseCatalog: ExerciseCatalogItem[];
   workoutLogs: WorkoutLog[];
   personalRecords: PersonalRecord[];
   completeWorkout: (params: {
@@ -43,6 +47,9 @@ type WorkoutAppContextValue = {
   updateSettings: (nextSettings: Partial<AppSettings>) => void;
   deleteWorkout: (workoutId: string) => void;
   updateWorkout: (updatedWorkout: WorkoutLog) => void;
+  createOrUpdateUserExercise: (
+    input: Omit<ExerciseCatalogItem, "id" | "ownership" | "slug"> & { slug?: string },
+  ) => Promise<{ ok: boolean; error?: string }>;
   importWorkouts: (workouts: ImportedWorkoutDraft[]) => Promise<{ imported: number; skipped: number }>;
 };
 
@@ -54,6 +61,9 @@ function computePersonalRecords(logs: WorkoutLog[]): PersonalRecord[] {
 
   for (const workout of logs) {
     for (const exercise of workout.exercises) {
+      if (!exercise.exerciseKey) {
+        continue;
+      }
       const existing = records.get(exercise.exerciseKey);
       const totalVolume = exercise.setResults.reduce(
         (sum, setResult) => sum + setResult.completedReps * exercise.weight,
@@ -117,9 +127,10 @@ function buildWorkoutFingerprint(workout: {
   exercises: WorkoutLog["exercises"];
 }) {
   const compactExercises = [...workout.exercises]
-    .sort((a, b) => a.exerciseKey.localeCompare(b.exerciseKey))
+    .sort((a, b) => (a.exerciseName || "").localeCompare(b.exerciseName || ""))
     .map((exercise) => ({
-      exerciseKey: exercise.exerciseKey,
+      exerciseKey: exercise.exerciseKey ?? null,
+      exerciseName: exercise.exerciseName,
       weight: Number(exercise.weight.toFixed(2)),
       sets: exercise.setResults.map((setResult) => ({
         reps: setResult.completedReps,
@@ -142,6 +153,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   const [stateLoaded, setStateLoaded] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"local" | "syncing" | "synced" | "error">("local");
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [exerciseCatalog, setExerciseCatalog] = useState<ExerciseCatalogItem[]>([]);
 
   const getSupabaseToken = useCallback(async () => {
     try {
@@ -244,6 +256,20 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
       }
     })();
   }, [getSupabaseToken, stateLoaded, user?.id]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      return;
+    }
+    void (async () => {
+      const token = await getSupabaseToken();
+      if (!token) return;
+      const result = await fetchExercisesFromSupabase(user.id, token);
+      if (result.ok && result.data) {
+        setExerciseCatalog(result.data);
+      }
+    })();
+  }, [getSupabaseToken, user?.id]);
 
   useEffect(() => {
     if (!stateLoaded) {
@@ -372,14 +398,65 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
 
     const importedLogs: WorkoutLog[] = [];
     for (const workout of workouts) {
+      const resolvedExercises: WorkoutExerciseLog[] = [];
+      for (const exercise of workout.exercises) {
+        const existingCatalog = exerciseCatalog.find(
+          (item) => item.name.toLowerCase() === exercise.exerciseName.toLowerCase(),
+        );
+
+        if (existingCatalog) {
+          resolvedExercises.push({
+            ...exercise,
+            exerciseId: existingCatalog.id,
+          });
+          continue;
+        }
+
+        if (!user?.id) {
+          resolvedExercises.push(exercise);
+          continue;
+        }
+
+        const token = await getSupabaseToken();
+        if (!token) {
+          resolvedExercises.push(exercise);
+          continue;
+        }
+
+        const created = await upsertUserExerciseInSupabase(
+          user.id,
+          {
+            name: exercise.exerciseName,
+            primaryMuscle: "Unknown",
+            secondaryMuscles: [],
+            equipment: "Unknown",
+            movementPattern: "Unknown",
+            description: "Imported from workout history",
+          },
+          token,
+        );
+        if (created.ok && created.data) {
+          setExerciseCatalog((previous) => {
+            const exists = previous.some((item) => item.id === created.data!.id);
+            return exists ? previous : [...previous, created.data!];
+          });
+          resolvedExercises.push({
+            ...exercise,
+            exerciseId: created.data.id,
+          });
+        } else {
+          resolvedExercises.push(exercise);
+        }
+      }
+
       const nextLog: WorkoutLog = {
         id: crypto.randomUUID(),
         userId: user?.id ?? "local",
         date: workout.date,
         workoutType: workout.workoutType,
         workoutNote: workout.workoutNote,
-        workoutSummary: summarizeWorkout(workout.exercises),
-        exercises: workout.exercises,
+        workoutSummary: summarizeWorkout(resolvedExercises),
+        exercises: resolvedExercises,
       };
       const fingerprint = buildWorkoutFingerprint(nextLog);
       if (existingFingerprintSet.has(fingerprint)) {
@@ -429,6 +506,27 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     };
   };
 
+  const createOrUpdateUserExercise = async (
+    input: Omit<ExerciseCatalogItem, "id" | "ownership" | "slug"> & { slug?: string },
+  ) => {
+    if (!user?.id) {
+      return { ok: false, error: "You must be signed in to manage custom exercises." };
+    }
+    const token = await getSupabaseToken();
+    if (!token) {
+      return { ok: false, error: "No Supabase auth token available." };
+    }
+    const result = await upsertUserExerciseInSupabase(user.id, input, token);
+    if (!result.ok || !result.data) {
+      return { ok: false, error: !result.ok ? result.error : "Unable to save exercise." };
+    }
+    setExerciseCatalog((previous) => {
+      const without = previous.filter((item) => item.id !== result.data!.id);
+      return [...without, result.data!].sort((a, b) => a.name.localeCompare(b.name));
+    });
+    return { ok: true };
+  };
+
   const personalRecords = useMemo(() => computePersonalRecords(state.workoutLogs), [state.workoutLogs]);
 
   const value: WorkoutAppContextValue = {
@@ -439,12 +537,14 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     settings: state.settings,
     nextWorkoutExercises,
     currentWeights: state.progression.currentWeights,
+    exerciseCatalog,
     workoutLogs: state.workoutLogs,
     personalRecords,
     completeWorkout,
     updateSettings,
     deleteWorkout,
     updateWorkout,
+    createOrUpdateUserExercise,
     importWorkouts,
   };
 
@@ -459,6 +559,9 @@ export function useWorkoutApp() {
   return context;
 }
 
-export function getExerciseName(exerciseKey: ExerciseKey) {
-  return EXERCISE_BY_KEY[exerciseKey].name;
+export function getExerciseName(exerciseKey?: ExerciseKey, fallbackName?: string) {
+  if (exerciseKey) {
+    return EXERCISE_BY_KEY[exerciseKey].name;
+  }
+  return fallbackName ?? "Unknown Exercise";
 }

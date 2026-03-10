@@ -42,7 +42,10 @@ export default function Home() {
               <div className="font-medium">{new Date(workout.date).toLocaleDateString()}</div>
               <div className="text-[#c7d7e0]">
                 {workout.exercises
-                  .map((exercise) => `${getExerciseName(exercise.exerciseKey)} ${exercise.weight}`)
+                  .map(
+                    (exercise) =>
+                      `${getExerciseName(exercise.exerciseKey, exercise.exerciseName)} ${exercise.weight}`,
+                  )
                   .join(" | ")}
               </div>
             </div>

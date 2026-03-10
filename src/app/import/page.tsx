@@ -45,8 +45,8 @@ export default function ImportPage() {
         <div className="text-sm text-[#9ab0bd]">How your CSV should look</div>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-[#d7e4eb]">
           <li>Header row must include: Date (yyyy/mm/dd), Workout Name, Exercise, SetsxReps, Set 1..5 columns.</li>
-          <li>Supported exercises: Squat, Bench Press, Barbell Row, Overhead Press, Deadlift.</li>
-          <li>Unsupported exercises are skipped and shown in import issues.</li>
+          <li>Known exercises map to the global catalog.</li>
+          <li>Unknown exercise names are imported as user-defined exercises when signed in.</li>
           <li>Date format expected: yyyy/mm/dd (as exported by StrongLifts CSV).</li>
         </ul>
       </div>

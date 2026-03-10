@@ -1,0 +1,74 @@
+[
+  {
+    "slug": "squat",
+    "name": "Squat",
+    "primaryMuscle": "Quadriceps",
+    "secondaryMuscles": ["Glutes", "Hamstrings", "Core"],
+    "equipment": "Barbell",
+    "movementPattern": "Squat",
+    "description": "Brace hard, descend with control, and drive up through mid-foot."
+  },
+  {
+    "slug": "bench-press",
+    "name": "Bench Press",
+    "primaryMuscle": "Chest",
+    "secondaryMuscles": ["Triceps", "Shoulders"],
+    "equipment": "Barbell",
+    "movementPattern": "Horizontal Push",
+    "description": "Set upper back tight, lower to lower chest, and press with a stable bar path."
+  },
+  {
+    "slug": "barbell-row",
+    "name": "Barbell Row",
+    "primaryMuscle": "Back",
+    "secondaryMuscles": ["Biceps", "Rear Delts", "Core"],
+    "equipment": "Barbell",
+    "movementPattern": "Horizontal Pull",
+    "description": "Hinge and row the bar to lower ribs while keeping torso braced."
+  },
+  {
+    "slug": "overhead-press",
+    "name": "Overhead Press",
+    "primaryMuscle": "Shoulders",
+    "secondaryMuscles": ["Triceps", "Upper Chest", "Core"],
+    "equipment": "Barbell",
+    "movementPattern": "Vertical Push",
+    "description": "Press bar overhead in a vertical line while maintaining full-body tension."
+  },
+  {
+    "slug": "deadlift",
+    "name": "Deadlift",
+    "primaryMuscle": "Posterior Chain",
+    "secondaryMuscles": ["Back", "Glutes", "Hamstrings", "Forearms"],
+    "equipment": "Barbell",
+    "movementPattern": "Hinge",
+    "description": "Pull slack out, push the floor away, and lock out with hips and lats engaged."
+  },
+  {
+    "slug": "pull-up",
+    "name": "Pull Up",
+    "primaryMuscle": "Back",
+    "secondaryMuscles": ["Biceps", "Forearms"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Vertical Pull",
+    "description": "Pull chest toward bar with an overhand grip, then lower under control."
+  },
+  {
+    "slug": "chin-up",
+    "name": "Chinup",
+    "primaryMuscle": "Back",
+    "secondaryMuscles": ["Biceps", "Forearms"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Vertical Pull",
+    "description": "Use an underhand grip, pull to the bar, and control the descent."
+  },
+  {
+    "slug": "dip",
+    "name": "Dips",
+    "primaryMuscle": "Triceps",
+    "secondaryMuscles": ["Chest", "Shoulders"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Vertical Push",
+    "description": "Descend under control with shoulders stable, then press back to lockout."
+  }
+]

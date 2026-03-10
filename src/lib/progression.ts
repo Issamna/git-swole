@@ -41,6 +41,9 @@ export function applyWorkoutProgression(
   const nextFailStreaks = { ...previous.failStreaks };
 
   for (const exerciseLog of exerciseLogs) {
+    if (!exerciseLog.exerciseKey) {
+      continue;
+    }
     const succeeded = didExerciseSucceed(exerciseLog);
     const key = exerciseLog.exerciseKey;
 

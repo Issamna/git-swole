@@ -21,7 +21,16 @@ Fill in Clerk + Supabase keys in `.env.local`.
 - Open your Supabase SQL editor
 - Run `supabase/schema.sql`
 
-4) Run dev server:
+4) (Optional but recommended) Sync global exercise catalog:
+
+```bash
+npm run sync:exercises
+```
+
+This reads `data/global-exercises.json` and upserts global exercises idempotently.
+It requires `SUPABASE_SERVICE_ROLE_KEY` in your environment.
+
+5) Run dev server:
 
 ```bash
 npm run dev
@@ -54,3 +63,5 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 - Local persistence works without auth (localStorage fallback).
 - When signed in with Clerk, settings/progression/workouts sync through Supabase.
+- Global exercise catalog source of truth lives in `data/global-exercises.json`.
+- `npm run sync:exercises` can be safely rerun after catalog edits.

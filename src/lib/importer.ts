@@ -136,7 +136,6 @@ export function parseStrongLiftsCsv(csvText: string): ImportParseResult {
 
     if (!exerciseKey) {
       unmappedExercises.add(exerciseNameRaw);
-      continue;
     }
 
     const targetReps = parseTargetReps(cleanedRow["SetsxReps"]);
@@ -148,6 +147,7 @@ export function parseStrongLiftsCsv(csvText: string): ImportParseResult {
     const existing = grouped.get(groupKey);
     const exerciseLog: WorkoutExerciseLog = {
       exerciseKey,
+      exerciseName: exerciseNameRaw,
       weight: exerciseWeight,
       setResults,
       note: undefined,
@@ -163,7 +163,11 @@ export function parseStrongLiftsCsv(csvText: string): ImportParseResult {
       continue;
     }
 
-    const hasExercise = existing.exercises.some((exercise) => exercise.exerciseKey === exerciseKey);
+    const hasExercise = existing.exercises.some(
+      (exercise) =>
+        exercise.exerciseName.toLowerCase() === exerciseNameRaw.toLowerCase() ||
+        (exercise.exerciseKey && exerciseKey && exercise.exerciseKey === exerciseKey),
+    );
     if (!hasExercise) {
       existing.exercises.push(exerciseLog);
     }
@@ -171,8 +175,8 @@ export function parseStrongLiftsCsv(csvText: string): ImportParseResult {
 
   if (unmappedExercises.size > 0) {
     issues.push(
-      `Skipped unsupported exercises: ${[...unmappedExercises].sort().join(", ")}. ` +
-        "Only Squat, Bench Press, Barbell Row, Overhead Press, and Deadlift were imported.",
+      `Unmapped exercises found: ${[...unmappedExercises].sort().join(", ")}. ` +
+        "They will be imported as user-defined exercises.",
     );
   }
 

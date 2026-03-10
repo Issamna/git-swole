@@ -47,7 +47,10 @@ export default function HistoryPage() {
             </div>
             <div className="text-sm text-[#c7d7e0]">
               {workout.exercises
-                .map((exercise) => `${getExerciseName(exercise.exerciseKey)} ${exercise.weight}`)
+                .map(
+                  (exercise) =>
+                    `${getExerciseName(exercise.exerciseKey, exercise.exerciseName)} ${exercise.weight}`,
+                )
                 .join(" | ")}
             </div>
           </button>
@@ -57,8 +60,10 @@ export default function HistoryPage() {
                 <div className="rounded bg-[#2b3a43] p-3 text-sm text-[#d7e4eb]">{workout.workoutNote}</div>
               ) : null}
               {workout.exercises.map((exercise, exerciseIndex) => (
-                <div key={exercise.exerciseKey}>
-                  <div className="text-sm font-medium">{getExerciseName(exercise.exerciseKey)}</div>
+                <div key={`${exercise.exerciseKey ?? exercise.exerciseName}-${exerciseIndex}`}>
+                  <div className="text-sm font-medium">
+                    {getExerciseName(exercise.exerciseKey, exercise.exerciseName)}
+                  </div>
                   <div className="mt-1 grid gap-1">
                     {exercise.setResults.map((setResult, setIndex) => (
                       <div key={setResult.setNumber} className="grid grid-cols-[64px_1fr] gap-2">
