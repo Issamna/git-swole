@@ -23,6 +23,7 @@ import {
   ExerciseCatalogItem,
   ExerciseKey,
   PersonalRecord,
+  WorkoutTemplate,
   WorkoutExerciseLog,
   WorkoutLog,
   WorkoutSummary,
@@ -32,9 +33,16 @@ type WorkoutAppContextValue = {
   stateLoaded: boolean;
   syncStatus: "local" | "syncing" | "synced" | "error";
   syncError: string | null;
-  nextWorkoutType: "A" | "B";
+  nextWorkoutType: string;
+  nextWorkoutName: string;
   settings: AppSettings;
-  nextWorkoutExercises: { exerciseKey: ExerciseKey; sets: number; reps: number }[];
+  nextWorkoutExercises: {
+    exerciseId: string;
+    exerciseName: string;
+    exerciseKey?: ExerciseKey;
+    sets: number;
+    reps: number;
+  }[];
   currentWeights: Record<ExerciseKey, number>;
   exerciseCatalog: ExerciseCatalogItem[];
   workoutLogs: WorkoutLog[];
@@ -99,7 +107,7 @@ function summarizeWorkout(exercises: WorkoutExerciseLog[]): WorkoutSummary {
   return allSuccessful ? "up" : "down";
 }
 
-function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number) {
+function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number, workoutGroups: WorkoutTemplate[]) {
   if (logs.length === 0) {
     return DEFAULT_PROGRESSION;
   }
@@ -108,17 +116,36 @@ function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number) {
   let progression = { ...DEFAULT_PROGRESSION };
 
   for (const workout of ascending) {
+    const normalizedWorkoutType = mapLegacyWorkoutTypeToGroupId(workout.workoutType);
     progression = applyWorkoutProgression(
       {
         ...progression,
-        nextWorkoutType: workout.workoutType,
+        nextWorkoutType: normalizedWorkoutType,
       },
       workout.exercises,
       increment,
+      getNextWorkoutGroupId(normalizedWorkoutType, workoutGroups),
     );
   }
 
   return progression;
+}
+
+function getNextWorkoutGroupId(currentGroupId: string, groups: WorkoutTemplate[]) {
+  if (groups.length === 0) {
+    return currentGroupId;
+  }
+  const currentIndex = groups.findIndex((group) => group.id === currentGroupId);
+  if (currentIndex < 0) {
+    return groups[0].id;
+  }
+  return groups[(currentIndex + 1) % groups.length].id;
+}
+
+function mapLegacyWorkoutTypeToGroupId(type: string) {
+  if (type === "A") return "workout-a";
+  if (type === "B") return "workout-b";
+  return type;
 }
 
 function buildWorkoutFingerprint(workout: {
@@ -127,16 +154,22 @@ function buildWorkoutFingerprint(workout: {
   exercises: WorkoutLog["exercises"];
 }) {
   const compactExercises = [...workout.exercises]
-    .sort((a, b) => (a.exerciseName || "").localeCompare(b.exerciseName || ""))
+    .sort((a, b) =>
+      `${a.exerciseId ?? ""}:${a.exerciseName || ""}`.localeCompare(`${b.exerciseId ?? ""}:${b.exerciseName || ""}`),
+    )
     .map((exercise) => ({
+      exerciseId: exercise.exerciseId ?? null,
       exerciseKey: exercise.exerciseKey ?? null,
       exerciseName: exercise.exerciseName,
       weight: Number(exercise.weight.toFixed(2)),
-      sets: exercise.setResults.map((setResult) => ({
-        reps: setResult.completedReps,
-        target: setResult.targetReps,
-        skipped: setResult.skipped,
-      })),
+      sets: [...exercise.setResults]
+        .sort((a, b) => a.setNumber - b.setNumber)
+        .map((setResult) => ({
+          setNumber: setResult.setNumber,
+          reps: setResult.completedReps,
+          target: setResult.targetReps,
+          skipped: setResult.skipped,
+        })),
     }));
 
   return JSON.stringify({
@@ -306,19 +339,33 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   }, [getSupabaseToken, state, stateLoaded, user?.id]);
 
   const nextWorkoutExercises = useMemo(() => {
-    if (state.progression.nextWorkoutType === "A") {
-      return state.settings.workoutAExercises.map((exerciseKey, idx) => ({
-        exerciseKey,
-        sets: idx === 2 && exerciseKey === "deadlift" ? 1 : 5,
-        reps: 5,
-      }));
+    const nextGroup =
+      state.settings.workoutGroups.find((group) => group.id === state.progression.nextWorkoutType) ??
+      state.settings.workoutGroups[0];
+    if (!nextGroup) {
+      return [];
     }
-    return state.settings.workoutBExercises.map((exerciseKey, idx) => ({
-      exerciseKey,
-      sets: idx === 2 && exerciseKey === "deadlift" ? 1 : 5,
-      reps: 5,
-    }));
-  }, [state.progression.nextWorkoutType, state.settings.workoutAExercises, state.settings.workoutBExercises]);
+
+    return nextGroup.exercises.map((exercise, idx) => {
+      const exerciseId = exercise.exerciseId;
+      const catalogItem = exerciseCatalog.find((item) => item.id === exerciseId || item.slug === exerciseId);
+      const slugKey =
+        catalogItem?.slug && catalogItem.slug in EXERCISE_BY_KEY
+          ? (catalogItem.slug as ExerciseKey)
+          : undefined;
+      const directKey = exerciseId in EXERCISE_BY_KEY ? (exerciseId as ExerciseKey) : undefined;
+      const exerciseKey = slugKey ?? directKey;
+      const exerciseName =
+        catalogItem?.name ?? (exerciseKey ? EXERCISE_BY_KEY[exerciseKey]?.name : undefined) ?? exerciseId;
+      return {
+        exerciseId: catalogItem?.id ?? exerciseId,
+        exerciseName,
+        exerciseKey,
+        sets: Math.max(1, Number(exercise.sets || (idx === 2 && exerciseKey === "deadlift" ? 1 : 5))),
+        reps: Math.max(1, Number(exercise.reps || 5)),
+      };
+    });
+  }, [exerciseCatalog, state.progression.nextWorkoutType, state.settings.workoutGroups]);
 
   const completeWorkout = ({
     exercises,
@@ -344,10 +391,15 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     }
 
     setState((previous) => {
+      const nextWorkoutGroupId = getNextWorkoutGroupId(
+        previous.progression.nextWorkoutType,
+        previous.settings.workoutGroups,
+      );
       const nextProgression = applyWorkoutProgression(
         previous.progression,
         exercises,
         previous.settings.weightIncrement,
+        nextWorkoutGroupId,
       );
       return {
         ...previous,
@@ -358,13 +410,25 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   };
 
   const updateSettings = (nextSettings: Partial<AppSettings>) => {
-    setState((previous) => ({
-      ...previous,
-      settings: {
+    setState((previous) => {
+      const mergedSettings = {
         ...previous.settings,
         ...nextSettings,
-      },
-    }));
+      };
+      const nextGroupId = mergedSettings.workoutGroups.some(
+        (group) => group.id === previous.progression.nextWorkoutType,
+      )
+        ? previous.progression.nextWorkoutType
+        : (mergedSettings.workoutGroups[0]?.id ?? previous.progression.nextWorkoutType);
+      return {
+        ...previous,
+        settings: mergedSettings,
+        progression: {
+          ...previous.progression,
+          nextWorkoutType: nextGroupId,
+        },
+      };
+    });
   };
 
   const deleteWorkout = (workoutId: string) => {
@@ -453,7 +517,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
         id: crypto.randomUUID(),
         userId: user?.id ?? "local",
         date: workout.date,
-        workoutType: workout.workoutType,
+        workoutType: mapLegacyWorkoutTypeToGroupId(workout.workoutType),
         workoutNote: workout.workoutNote,
         workoutSummary: summarizeWorkout(resolvedExercises),
         exercises: resolvedExercises,
@@ -471,7 +535,11 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     }
 
     const mergedLogs = [...importedLogs, ...state.workoutLogs].sort((a, b) => (a.date > b.date ? -1 : 1));
-    const nextProgression = recomputeProgressionFromLogs(mergedLogs, state.settings.weightIncrement);
+    const nextProgression = recomputeProgressionFromLogs(
+      mergedLogs,
+      state.settings.weightIncrement,
+      state.settings.workoutGroups,
+    );
 
     setState((previous) => ({
       ...previous,
@@ -528,12 +596,16 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   };
 
   const personalRecords = useMemo(() => computePersonalRecords(state.workoutLogs), [state.workoutLogs]);
+  const nextWorkoutName =
+    state.settings.workoutGroups.find((group) => group.id === state.progression.nextWorkoutType)?.name ??
+    "Workout";
 
   const value: WorkoutAppContextValue = {
     stateLoaded,
     syncStatus,
     syncError,
     nextWorkoutType: state.progression.nextWorkoutType,
+    nextWorkoutName,
     settings: state.settings,
     nextWorkoutExercises,
     currentWeights: state.progression.currentWeights,

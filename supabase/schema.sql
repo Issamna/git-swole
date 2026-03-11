@@ -6,6 +6,10 @@ create table if not exists public.users (
   weight_increment numeric not null default 5,
   rest_timer_seconds integer not null default 90,
   barbell_weight numeric not null default 45,
+  workout_groups jsonb not null default '[]'::jsonb,
+  workout_a_exercise_ids text[] not null default array['squat', 'bench_press', 'barbell_row'],
+  workout_b_exercise_ids text[] not null default array['squat', 'overhead_press', 'deadlift'],
+  -- Legacy key slots kept temporarily for backward compatibility.
   workout_a_exercises text[] not null default array['squat', 'bench_press', 'barbell_row'],
   workout_b_exercises text[] not null default array['squat', 'overhead_press', 'deadlift'],
   created_at timestamptz not null default now(),
@@ -60,6 +64,55 @@ alter table public.workout_sets
   add column if not exists exercise_id uuid;
 alter table public.workout_sets
   add column if not exists exercise_name text;
+alter table public.users
+  add column if not exists workout_a_exercise_ids text[] not null default array['squat', 'bench_press', 'barbell_row'];
+alter table public.users
+  add column if not exists workout_b_exercise_ids text[] not null default array['squat', 'overhead_press', 'deadlift'];
+alter table public.users
+  add column if not exists workout_groups jsonb not null default '[]'::jsonb;
+
+update public.users
+set
+  workout_a_exercise_ids = coalesce(workout_a_exercise_ids, workout_a_exercises, array['squat', 'bench_press', 'barbell_row']),
+  workout_b_exercise_ids = coalesce(workout_b_exercise_ids, workout_b_exercises, array['squat', 'overhead_press', 'deadlift'])
+where workout_a_exercise_ids is null
+   or workout_b_exercise_ids is null;
+
+update public.users
+set workout_groups = jsonb_build_array(
+  jsonb_build_object(
+    'id', 'workout-a',
+    'name', 'Workout A',
+    'exercises', coalesce(
+      (
+        select jsonb_agg(jsonb_build_object('exerciseId', exercise_id, 'sets', 5, 'reps', 5))
+        from unnest(coalesce(workout_a_exercise_ids, array['squat', 'bench_press', 'barbell_row'])) as exercise_id
+      ),
+      '[]'::jsonb
+    )
+  ),
+  jsonb_build_object(
+    'id', 'workout-b',
+    'name', 'Workout B',
+    'exercises', coalesce(
+      (
+        select jsonb_agg(
+          jsonb_build_object(
+            'exerciseId',
+            exercise_id,
+            'sets',
+            case when ordinality = 3 and exercise_id = 'deadlift' then 1 else 5 end,
+            'reps',
+            5
+          )
+        )
+        from unnest(coalesce(workout_b_exercise_ids, array['squat', 'overhead_press', 'deadlift'])) with ordinality as t(exercise_id, ordinality)
+      ),
+      '[]'::jsonb
+    )
+  )
+)
+where workout_groups = '[]'::jsonb;
 
 do $$
 begin
@@ -103,24 +156,24 @@ begin
       add constraint users_barbell_weight_check check (barbell_weight >= 0);
   end if;
 
-  if not exists (
+  if exists (
     select 1
     from pg_constraint
     where conname = 'progression_workout_type_check'
       and conrelid = 'public.progression'::regclass
   ) then
     alter table public.progression
-      add constraint progression_workout_type_check check (next_workout_type in ('A', 'B'));
+      drop constraint progression_workout_type_check;
   end if;
 
-  if not exists (
+  if exists (
     select 1
     from pg_constraint
     where conname = 'workouts_type_check'
       and conrelid = 'public.workouts'::regclass
   ) then
     alter table public.workouts
-      add constraint workouts_type_check check (workout_type in ('A', 'B'));
+      drop constraint workouts_type_check;
   end if;
 
   if not exists (

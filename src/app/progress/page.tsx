@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Legend,
@@ -17,6 +17,12 @@ import { ExerciseKey } from "@/lib/types";
 export default function ProgressPage() {
   const { workoutLogs, personalRecords } = useWorkoutApp();
   const [selectedExercise, setSelectedExercise] = useState<ExerciseKey>("squat");
+  const [hasMounted, setHasMounted] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setHasMounted(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const chartData = useMemo(() => {
     return [...workoutLogs]
@@ -57,20 +63,22 @@ export default function ProgressPage() {
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
         <div className="mb-3 text-sm text-[#9ab0bd]">{getExerciseName(selectedExercise)} trend</div>
         <div className="h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" stroke="#9ab0bd" />
-              <YAxis stroke="#9ab0bd" />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#24323a", borderColor: "#334753", color: "#ffffff" }}
-                labelStyle={{ color: "#ffffff" }}
-              />
-              <Legend />
-              <Line type="monotone" dataKey="weight" stroke="#45bb7c" strokeWidth={2} />
-              <Line type="monotone" dataKey="volume" stroke="#7aa7ff" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
+          {hasMounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" stroke="#9ab0bd" />
+                <YAxis stroke="#9ab0bd" />
+                <Tooltip
+                  contentStyle={{ backgroundColor: "#24323a", borderColor: "#334753", color: "#ffffff" }}
+                  labelStyle={{ color: "#ffffff" }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="weight" stroke="#45bb7c" strokeWidth={2} />
+                <Line type="monotone" dataKey="volume" stroke="#7aa7ff" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : null}
         </div>
       </div>
 

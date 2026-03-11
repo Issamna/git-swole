@@ -5,7 +5,7 @@ import { getExerciseName, useWorkoutApp } from "@/context/workout-app-context";
 import { WorkoutLog } from "@/lib/types";
 
 export default function HistoryPage() {
-  const { workoutLogs, deleteWorkout, updateWorkout } = useWorkoutApp();
+  const { workoutLogs, deleteWorkout, updateWorkout, settings } = useWorkoutApp();
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const handleEditSet = (
@@ -42,7 +42,8 @@ export default function HistoryPage() {
           >
             <div className="text-sm text-[#9ab0bd]">{new Date(workout.date).toLocaleDateString()}</div>
             <div className="font-semibold">
-              {`Workout ${workout.workoutType}`}{" "}
+              {settings.workoutGroups.find((group) => group.id === workout.workoutType)?.name ??
+                `Workout ${workout.workoutType}`}{" "}
               {workout.workoutSummary === "up" ? "👍" : workout.workoutSummary === "down" ? "👎" : ""}
             </div>
             <div className="text-sm text-[#c7d7e0]">

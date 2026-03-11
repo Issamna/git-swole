@@ -8,6 +8,7 @@ import {
 } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase";
 import { EXERCISE_BY_KEY } from "@/lib/program";
+import { DEFAULT_WORKOUT_GROUPS } from "@/lib/program";
 
 export const LOCAL_STATE_KEY = "git-swole-state-v1";
 export type SyncResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
@@ -18,8 +19,7 @@ export const DEFAULT_APP_STATE: WorkoutAppState = {
     weightIncrement: 5,
     restTimerSeconds: 90,
     barbellWeight: 45,
-    workoutAExercises: ["squat", "bench_press", "barbell_row"],
-    workoutBExercises: ["squat", "overhead_press", "deadlift"],
+    workoutGroups: DEFAULT_WORKOUT_GROUPS,
   },
   progression: DEFAULT_PROGRESSION,
   workoutLogs: [],
@@ -51,14 +51,79 @@ function parseWorkoutNote(raw: string | null): { workoutNote?: string; workoutSu
   };
 }
 
-function normalizeExerciseSelection(
-  exercises: ExerciseKey[],
-  fallback: ExerciseKey[],
-): ExerciseKey[] {
-  if (exercises.length !== 3) {
-    return fallback;
+function migrateLegacyWorkoutGroups(settings: Partial<WorkoutAppState["settings"]> | undefined) {
+  if (!settings) {
+    return DEFAULT_APP_STATE.settings.workoutGroups;
   }
-  return exercises;
+
+  if (Array.isArray(settings.workoutGroups) && settings.workoutGroups.length > 0) {
+    const normalized = settings.workoutGroups
+      .filter((group): group is NonNullable<typeof settings.workoutGroups>[number] => !!group && !!group.id)
+      .map((group) => ({
+        id: group.id,
+        name: group.name?.trim() || "Workout",
+        exercises: (group.exercises ?? [])
+          .filter((exercise) => !!exercise?.exerciseId)
+          .map((exercise) => ({
+            exerciseId: exercise.exerciseId,
+            sets: Math.max(1, Number(exercise.sets || 5)),
+            reps: Math.max(1, Number(exercise.reps || 5)),
+          })),
+      }))
+      .filter((group) => group.exercises.length > 0);
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  const legacyA = (settings as { workoutAExerciseIds?: string[]; workoutAExercises?: string[] }).workoutAExerciseIds ??
+    (settings as { workoutAExercises?: string[] }).workoutAExercises ??
+    ["squat", "bench_press", "barbell_row"];
+  const legacyB = (settings as { workoutBExerciseIds?: string[]; workoutBExercises?: string[] }).workoutBExerciseIds ??
+    (settings as { workoutBExercises?: string[] }).workoutBExercises ??
+    ["squat", "overhead_press", "deadlift"];
+
+  return [
+    {
+      id: "workout-a",
+      name: "Workout A",
+      exercises: legacyA.map((exerciseId) => ({
+        exerciseId,
+        sets: 5,
+        reps: 5,
+      })),
+    },
+    {
+      id: "workout-b",
+      name: "Workout B",
+      exercises: legacyB.map((exerciseId, idx) => ({
+        exerciseId,
+        sets: idx === 2 && exerciseId === "deadlift" ? 1 : 5,
+        reps: 5,
+      })),
+    },
+  ];
+}
+
+function normalizeNextWorkoutType(nextWorkoutType: string | undefined, workoutGroups: WorkoutAppState["settings"]["workoutGroups"]) {
+  if (!nextWorkoutType) {
+    return workoutGroups[0]?.id ?? DEFAULT_PROGRESSION.nextWorkoutType;
+  }
+  if (nextWorkoutType === "A") {
+    return "workout-a";
+  }
+  if (nextWorkoutType === "B") {
+    return "workout-b";
+  }
+  return workoutGroups.some((group) => group.id === nextWorkoutType)
+    ? nextWorkoutType
+    : (workoutGroups[0]?.id ?? DEFAULT_PROGRESSION.nextWorkoutType);
+}
+
+function normalizeWorkoutLogType(workoutType: string) {
+  if (workoutType === "A") return "workout-a";
+  if (workoutType === "B") return "workout-b";
+  return workoutType;
 }
 
 export function loadLocalState(): WorkoutAppState {
@@ -73,22 +138,17 @@ export function loadLocalState(): WorkoutAppState {
 
   try {
     const parsed = JSON.parse(raw) as Partial<WorkoutAppState>;
+    const workoutGroups = migrateLegacyWorkoutGroups(parsed.settings);
     return {
       settings: {
         ...DEFAULT_APP_STATE.settings,
         ...parsed.settings,
-        workoutAExercises: normalizeExerciseSelection(
-          parsed.settings?.workoutAExercises ?? [],
-          DEFAULT_APP_STATE.settings.workoutAExercises,
-        ),
-        workoutBExercises: normalizeExerciseSelection(
-          parsed.settings?.workoutBExercises ?? [],
-          DEFAULT_APP_STATE.settings.workoutBExercises,
-        ),
+        workoutGroups,
       },
       progression: {
         ...DEFAULT_APP_STATE.progression,
         ...parsed.progression,
+        nextWorkoutType: normalizeNextWorkoutType(parsed.progression?.nextWorkoutType, workoutGroups),
         currentWeights: {
           ...DEFAULT_APP_STATE.progression.currentWeights,
           ...parsed.progression?.currentWeights,
@@ -181,11 +241,22 @@ export async function syncFromSupabase(
         id: workout.id,
         userId,
         date: workout.date,
-        workoutType: workout.workout_type,
+        workoutType: normalizeWorkoutLogType(workout.workout_type),
         workoutNote: noteParts.workoutNote,
         workoutSummary: noteParts.workoutSummary,
         exercises: [...grouped.values()],
       };
+    });
+
+    const syncedWorkoutGroups = migrateLegacyWorkoutGroups({
+      workoutGroups: settingsRes.data.workout_groups ?? undefined,
+      workoutAExerciseIds: settingsRes.data.workout_a_exercise_ids ?? undefined,
+      workoutBExerciseIds: settingsRes.data.workout_b_exercise_ids ?? undefined,
+      workoutAExercises: settingsRes.data.workout_a_exercises ?? undefined,
+      workoutBExercises: settingsRes.data.workout_b_exercises ?? undefined,
+    } as Partial<WorkoutAppState["settings"]> & {
+      workoutAExercises?: string[];
+      workoutBExercises?: string[];
     });
 
     return {
@@ -197,11 +268,11 @@ export async function syncFromSupabase(
         weightIncrement: settingsRes.data.weight_increment,
         restTimerSeconds: settingsRes.data.rest_timer_seconds,
         barbellWeight: settingsRes.data.barbell_weight,
-        workoutAExercises: settingsRes.data.workout_a_exercises,
-        workoutBExercises: settingsRes.data.workout_b_exercises,
+        workoutGroups: syncedWorkoutGroups,
       },
       progression: {
-        nextWorkoutType: progressionRes.data.next_workout_type,
+        nextWorkoutType:
+          normalizeNextWorkoutType(progressionRes.data.next_workout_type, syncedWorkoutGroups),
         currentWeights: progressionRes.data.current_weights,
         failStreaks: progressionRes.data.fail_streaks,
       },
@@ -231,8 +302,7 @@ export async function persistSupabaseState(
       weight_increment: state.settings.weightIncrement,
       rest_timer_seconds: state.settings.restTimerSeconds,
       barbell_weight: state.settings.barbellWeight,
-      workout_a_exercises: state.settings.workoutAExercises,
-      workout_b_exercises: state.settings.workoutBExercises,
+      workout_groups: state.settings.workoutGroups,
       updated_at: new Date().toISOString(),
     }),
     supabase.from("progression").upsert({

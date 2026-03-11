@@ -9,6 +9,33 @@
     "description": "Brace hard, descend with control, and drive up through mid-foot."
   },
   {
+    "slug": "front-squat",
+    "name": "Front Squat",
+    "primaryMuscle": "Quadriceps",
+    "secondaryMuscles": ["Glutes", "Core"],
+    "equipment": "Barbell",
+    "movementPattern": "Squat",
+    "description": "Rack bar on shoulders, keep chest tall, sit between hips, and drive up."
+  },
+  {
+    "slug": "goblet-squat",
+    "name": "Goblet Squat",
+    "primaryMuscle": "Quadriceps",
+    "secondaryMuscles": ["Glutes", "Core"],
+    "equipment": "Dumbbell/Kettlebell",
+    "movementPattern": "Squat",
+    "description": "Hold weight at chest, sit back between knees, and maintain upright torso."
+  },
+  {
+    "slug": "bulgarian-split-squat",
+    "name": "Bulgarian Split Squat",
+    "primaryMuscle": "Quadriceps",
+    "secondaryMuscles": ["Glutes", "Hamstrings", "Core"],
+    "equipment": "Dumbbell/Bodyweight",
+    "movementPattern": "Lunge",
+    "description": "Rear foot elevated, descend straight down, and drive through front heel."
+  },
+  {
     "slug": "bench-press",
     "name": "Bench Press",
     "primaryMuscle": "Chest",
@@ -16,6 +43,24 @@
     "equipment": "Barbell",
     "movementPattern": "Horizontal Push",
     "description": "Set upper back tight, lower to lower chest, and press with a stable bar path."
+  },
+  {
+    "slug": "incline-bench-press",
+    "name": "Incline Bench Press",
+    "primaryMuscle": "Upper Chest",
+    "secondaryMuscles": ["Shoulders", "Triceps"],
+    "equipment": "Barbell/Dumbbell",
+    "movementPattern": "Horizontal Push",
+    "description": "Press from incline bench, keeping elbows under wrists and controlled descent."
+  },
+  {
+    "slug": "close-grip-bench-press",
+    "name": "Close Grip Bench Press",
+    "primaryMuscle": "Triceps",
+    "secondaryMuscles": ["Chest", "Shoulders"],
+    "equipment": "Barbell",
+    "movementPattern": "Horizontal Push",
+    "description": "Hands inside shoulder width, elbows tucked, press bar upward."
   },
   {
     "slug": "barbell-row",
@@ -27,6 +72,15 @@
     "description": "Hinge and row the bar to lower ribs while keeping torso braced."
   },
   {
+    "slug": "pendlay-row",
+    "name": "Pendlay Row",
+    "primaryMuscle": "Back",
+    "secondaryMuscles": ["Biceps", "Rear Delts"],
+    "equipment": "Barbell",
+    "movementPattern": "Horizontal Pull",
+    "description": "Explosive row from floor each rep, keep torso parallel and controlled."
+  },
+  {
     "slug": "overhead-press",
     "name": "Overhead Press",
     "primaryMuscle": "Shoulders",
@@ -36,6 +90,15 @@
     "description": "Press bar overhead in a vertical line while maintaining full-body tension."
   },
   {
+    "slug": "arnold-press",
+    "name": "Arnold Press",
+    "primaryMuscle": "Shoulders",
+    "secondaryMuscles": ["Triceps", "Core"],
+    "equipment": "Dumbbells",
+    "movementPattern": "Vertical Push",
+    "description": "Rotate dumbbells as you press overhead for full shoulder activation."
+  },
+  {
     "slug": "deadlift",
     "name": "Deadlift",
     "primaryMuscle": "Posterior Chain",
@@ -43,6 +106,24 @@
     "equipment": "Barbell",
     "movementPattern": "Hinge",
     "description": "Pull slack out, push the floor away, and lock out with hips and lats engaged."
+  },
+  {
+    "slug": "romanian-deadlift",
+    "name": "Romanian Deadlift",
+    "primaryMuscle": "Hamstrings",
+    "secondaryMuscles": ["Glutes", "Back", "Forearms"],
+    "equipment": "Barbell/Dumbbells",
+    "movementPattern": "Hinge",
+    "description": "Hinge at hips, keep bar close, feel stretch in hamstrings, then stand tall."
+  },
+  {
+    "slug": "sumo-deadlift",
+    "name": "Sumo Deadlift",
+    "primaryMuscle": "Posterior Chain",
+    "secondaryMuscles": ["Glutes", "Quadriceps", "Back"],
+    "equipment": "Barbell",
+    "movementPattern": "Hinge",
+    "description": "Wide stance, push knees out, maintain upright torso, and pull bar to lockout."
   },
   {
     "slug": "pull-up",
@@ -55,7 +136,7 @@
   },
   {
     "slug": "chin-up",
-    "name": "Chinup",
+    "name": "Chin Up",
     "primaryMuscle": "Back",
     "secondaryMuscles": ["Biceps", "Forearms"],
     "equipment": "Bodyweight",
@@ -70,5 +151,113 @@
     "equipment": "Bodyweight",
     "movementPattern": "Vertical Push",
     "description": "Descend under control with shoulders stable, then press back to lockout."
+  },
+  {
+    "slug": "face-pull",
+    "name": "Face Pull",
+    "primaryMuscle": "Rear Delts",
+    "secondaryMuscles": ["Traps", "Biceps"],
+    "equipment": "Cable",
+    "movementPattern": "Horizontal Pull",
+    "description": "Pull rope toward face with elbows high, squeeze shoulder blades."
+  },
+  {
+    "slug": "lateral-raise",
+    "name": "Lateral Raise",
+    "primaryMuscle": "Shoulders",
+    "secondaryMuscles": ["Traps"],
+    "equipment": "Dumbbells",
+    "movementPattern": "Isolation Push",
+    "description": "Raise arms to sides with slight bend in elbows, controlled motion."
+  },
+  {
+    "slug": "hammer-curl",
+    "name": "Hammer Curl",
+    "primaryMuscle": "Biceps",
+    "secondaryMuscles": ["Forearms", "Brachialis"],
+    "equipment": "Dumbbells",
+    "movementPattern": "Isolation Pull",
+    "description": "Curl dumbbells with neutral grip, keep elbows tucked."
+  },
+  {
+    "slug": "triceps-pushdown",
+    "name": "Triceps Pushdown",
+    "primaryMuscle": "Triceps",
+    "secondaryMuscles": ["Forearms"],
+    "equipment": "Cable",
+    "movementPattern": "Isolation Push",
+    "description": "Press cable down while keeping elbows pinned to sides."
+  },
+  {
+    "slug": "plank",
+    "name": "Plank",
+    "primaryMuscle": "Core",
+    "secondaryMuscles": ["Shoulders", "Glutes"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Static Hold",
+    "description": "Maintain straight line from head to heels, brace abs and glutes."
+  },
+  {
+    "slug": "side-plank",
+    "name": "Side Plank",
+    "primaryMuscle": "Obliques",
+    "secondaryMuscles": ["Core", "Shoulders"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Static Hold",
+    "description": "Support body on one arm while maintaining straight alignment."
+  },
+  {
+    "slug": "hanging-leg-raise",
+    "name": "Hanging Leg Raise",
+    "primaryMuscle": "Core",
+    "secondaryMuscles": ["Hip Flexors"],
+    "equipment": "Bodyweight",
+    "movementPattern": "Core",
+    "description": "Lift legs while hanging, control descent, brace core throughout."
+  },
+  {
+    "slug": "hip-thrust",
+    "name": "Hip Thrust",
+    "primaryMuscle": "Glutes",
+    "secondaryMuscles": ["Hamstrings", "Core"],
+    "equipment": "Barbell/Bodyweight",
+    "movementPattern": "Hip Hinge",
+    "description": "Drive hips up with bar across pelvis, squeeze glutes at top."
+  },
+  {
+    "slug": "leg-press",
+    "name": "Leg Press",
+    "primaryMuscle": "Quadriceps",
+    "secondaryMuscles": ["Glutes", "Hamstrings"],
+    "equipment": "Machine",
+    "movementPattern": "Squat",
+    "description": "Press platform away with feet shoulder-width, keep lower back on pad."
+  },
+  {
+    "slug": "calf-raise",
+    "name": "Calf Raise",
+    "primaryMuscle": "Calves",
+    "secondaryMuscles": [],
+    "equipment": "Bodyweight/Dumbbells",
+    "movementPattern": "Isolation",
+    "description": "Raise heels off floor slowly, control lowering."
+  },
+  {
+    "slug": "farmer-carry",
+    "name": "Farmer Carry",
+    "primaryMuscle": "Forearms",
+    "secondaryMuscles": ["Core", "Legs", "Traps"],
+    "equipment": "Dumbbells/Kettlebells",
+    "movementPattern": "Carry",
+    "description": "Walk while holding heavy weights at sides, keep core braced."
+  },
+  {
+    "slug": "kettlebell-swing",
+    "name": "Kettlebell Swing",
+    "primaryMuscle": "Posterior Chain",
+    "secondaryMuscles": ["Core", "Shoulders"],
+    "equipment": "Kettlebell",
+    "movementPattern": "Hip Hinge",
+    "description": "Hinge at hips to swing kettlebell forward explosively."
   }
 ]

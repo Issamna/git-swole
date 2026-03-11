@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { SignInButton, useAuth } from "@clerk/nextjs";
-import { getExerciseName, useWorkoutApp } from "@/context/workout-app-context";
+import { useWorkoutApp } from "@/context/workout-app-context";
 
 export default function Home() {
   const { isSignedIn } = useAuth();
-  const { nextWorkoutExercises, currentWeights, workoutLogs, stateLoaded, nextWorkoutType } = useWorkoutApp();
+  const { nextWorkoutExercises, currentWeights, workoutLogs, stateLoaded, nextWorkoutName } = useWorkoutApp();
 
   if (!stateLoaded) {
     return <div className="rounded-lg border border-[#334753] bg-[#24323a] p-6">Loading...</div>;
@@ -16,13 +16,14 @@ export default function Home() {
     <div className="space-y-4">
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-5">
         <div className="text-sm text-[#9ab0bd]">Next Workout</div>
-        <h1 className="text-3xl font-bold">{`Workout ${nextWorkoutType}`}</h1>
+        <h1 className="text-3xl font-bold">{nextWorkoutName}</h1>
         <div className="mt-3 space-y-2">
           {nextWorkoutExercises.map((exercise) => (
-            <div key={exercise.exerciseKey} className="flex items-center justify-between rounded bg-[#2b3a43] p-2">
-              <span>{getExerciseName(exercise.exerciseKey)}</span>
+            <div key={exercise.exerciseId} className="flex items-center justify-between rounded bg-[#2b3a43] p-2">
+              <span>{exercise.exerciseName}</span>
               <span className="text-sm text-[#c7d7e0]">
-                {currentWeights[exercise.exerciseKey]} x {exercise.sets}x{exercise.reps}
+                {exercise.exerciseKey ? currentWeights[exercise.exerciseKey] : 0} x {exercise.sets}x
+                {exercise.reps}
               </span>
             </div>
           ))}
@@ -44,7 +45,7 @@ export default function Home() {
                 {workout.exercises
                   .map(
                     (exercise) =>
-                      `${getExerciseName(exercise.exerciseKey, exercise.exerciseName)} ${exercise.weight}`,
+                      `${exercise.exerciseName} ${exercise.weight}`,
                   )
                   .join(" | ")}
               </div>

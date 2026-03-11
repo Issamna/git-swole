@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getExerciseName, useWorkoutApp } from "@/context/workout-app-context";
+import { useWorkoutApp } from "@/context/workout-app-context";
 import { RestTimer } from "@/components/rest-timer";
 import { calculatePlates } from "@/lib/plates";
 import { WorkoutSummary } from "@/lib/types";
@@ -14,7 +14,7 @@ type SetState = {
 };
 
 type WorkoutDraft = {
-  nextWorkoutType: "A" | "B";
+  nextWorkoutType: string;
   activeExerciseIndex: number;
   workoutNote: string;
   workoutSummary?: WorkoutSummary;
@@ -29,7 +29,7 @@ export function WorkoutSession() {
   const buildInitialSetStates = useCallback(() => {
     const initial: Record<string, SetState[]> = {};
     for (const exercise of nextWorkoutExercises) {
-      const key = exercise.exerciseKey;
+      const key = exercise.exerciseId;
       initial[key] = Array.from({ length: exercise.sets }).map(() => ({
         completedReps: exercise.reps,
         completed: false,
@@ -46,14 +46,16 @@ export function WorkoutSession() {
   const [setStates, setSetStates] = useState<Record<string, SetState[]>>(buildInitialSetStates);
   const [weightOverrides, setWeightOverrides] = useState<Record<string, number>>({});
 
-  const activeExercise = nextWorkoutExercises[activeExerciseIndex];
-  const activeExerciseWeight = weightOverrides[activeExercise.exerciseKey] ?? currentWeights[activeExercise.exerciseKey];
+  const activeExercise = nextWorkoutExercises[activeExerciseIndex] ?? null;
+  const activeExerciseWeight =
+    (activeExercise ? weightOverrides[activeExercise.exerciseId] : undefined) ??
+    (activeExercise?.exerciseKey ? currentWeights[activeExercise.exerciseKey] : 0);
   const plates = calculatePlates(activeExerciseWeight, settings.barbellWeight);
   const warmup = generateWarmupSets(activeExerciseWeight, settings.barbellWeight);
 
   const isWorkoutReadyToFinish = useMemo(() => {
     return nextWorkoutExercises.every((exercise) =>
-      setStates[exercise.exerciseKey]?.every((setState) => setState.completed || setState.skipped),
+      setStates[exercise.exerciseId]?.every((setState) => setState.completed || setState.skipped),
     );
   }, [nextWorkoutExercises, setStates]);
 
@@ -145,15 +147,26 @@ export function WorkoutSession() {
     resetSession();
   };
 
+  if (!activeExercise) {
+    return (
+      <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4 text-sm text-[#c7d7e0]">
+        No exercises configured for the next workout group yet. Add exercises in Settings under Program.
+      </div>
+    );
+  }
+
   const finishWorkout = () => {
     completeWorkout({
       note: workoutNote || undefined,
       summary: workoutSummary,
       exercises: nextWorkoutExercises.map((exercise) => ({
         exerciseKey: exercise.exerciseKey,
-        exerciseName: getExerciseName(exercise.exerciseKey),
-        weight: weightOverrides[exercise.exerciseKey] ?? currentWeights[exercise.exerciseKey],
-        setResults: setStates[exercise.exerciseKey].map((setResult, index) => ({
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseName,
+        weight:
+          weightOverrides[exercise.exerciseId] ??
+          (exercise.exerciseKey ? currentWeights[exercise.exerciseKey] : 0),
+        setResults: setStates[exercise.exerciseId].map((setResult, index) => ({
           setNumber: index + 1,
           targetReps: exercise.reps,
           completedReps: setResult.completedReps,
@@ -171,7 +184,7 @@ export function WorkoutSession() {
     <div className="space-y-4">
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
         <div className="text-sm text-[#9ab0bd]">Current Exercise</div>
-        <div className="text-2xl font-semibold">{getExerciseName(activeExercise.exerciseKey)}</div>
+        <div className="text-2xl font-semibold">{activeExercise.exerciseName}</div>
         <div className="mt-2">
           <label className="text-sm">Working Weight ({settings.units})</label>
           <input
@@ -181,7 +194,7 @@ export function WorkoutSession() {
             onChange={(event) =>
               setWeightOverrides((previous) => ({
                 ...previous,
-                [activeExercise.exerciseKey]: Number(event.target.value),
+                [activeExercise.exerciseId]: Number(event.target.value),
               }))
             }
           />
@@ -196,7 +209,7 @@ export function WorkoutSession() {
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
         <div className="text-sm text-[#9ab0bd]">Sets</div>
         <div className="mt-2 space-y-2">
-          {setStates[activeExercise.exerciseKey].map((setState, index) => (
+          {setStates[activeExercise.exerciseId].map((setState, index) => (
             <div key={index} className="grid grid-cols-[64px_1fr_auto_auto] items-center gap-2">
               <div className="text-sm">Set {index + 1}</div>
               <input
@@ -208,7 +221,7 @@ export function WorkoutSession() {
                   {
                     const completedReps = Number(event.target.value);
                     const hasReps = completedReps > 0;
-                    updateSet(activeExercise.exerciseKey, index, {
+                    updateSet(activeExercise.exerciseId, index, {
                       completedReps,
                       completed: hasReps,
                       skipped: hasReps ? false : setState.skipped,
@@ -219,11 +232,11 @@ export function WorkoutSession() {
               <button
                 className={`rounded px-2 py-1 text-xs ${setState.completed ? "bg-[#45bb7c] text-[#112019]" : "bg-[#2b3a43] text-white"}`}
                 onClick={() => {
-                  updateSet(activeExercise.exerciseKey, index, {
+                  updateSet(activeExercise.exerciseId, index, {
                     completed: true,
                     skipped: false,
                     completedReps:
-                      setStates[activeExercise.exerciseKey][index].completedReps || activeExercise.reps,
+                      setStates[activeExercise.exerciseId][index].completedReps || activeExercise.reps,
                   });
                   setRestTick((previous) => previous + 1);
                 }}
@@ -233,7 +246,7 @@ export function WorkoutSession() {
               <button
                 className={`rounded px-2 py-1 text-xs ${setState.skipped ? "bg-amber-500 text-white" : "bg-[#2b3a43] text-white"}`}
                 onClick={() => {
-                  updateSet(activeExercise.exerciseKey, index, {
+                  updateSet(activeExercise.exerciseId, index, {
                     skipped: true,
                     completed: false,
                   });

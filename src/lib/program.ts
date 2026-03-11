@@ -42,24 +42,26 @@ export const EXERCISE_KEY_BY_NAME = Object.fromEntries(
 ) as Record<string, ExerciseKey>;
 
 export const DEFAULT_WORKOUT_A: WorkoutTemplate = {
-  type: "A",
+  id: "workout-a",
   name: "Workout A",
   exercises: [
-    { exerciseKey: "squat", sets: 5, reps: 5 },
-    { exerciseKey: "bench_press", sets: 5, reps: 5 },
-    { exerciseKey: "barbell_row", sets: 5, reps: 5 },
+    { exerciseId: "squat", sets: 5, reps: 5 },
+    { exerciseId: "bench_press", sets: 5, reps: 5 },
+    { exerciseId: "barbell_row", sets: 5, reps: 5 },
   ],
 };
 
 export const DEFAULT_WORKOUT_B: WorkoutTemplate = {
-  type: "B",
+  id: "workout-b",
   name: "Workout B",
   exercises: [
-    { exerciseKey: "squat", sets: 5, reps: 5 },
-    { exerciseKey: "overhead_press", sets: 5, reps: 5 },
-    { exerciseKey: "deadlift", sets: 1, reps: 5 },
+    { exerciseId: "squat", sets: 5, reps: 5 },
+    { exerciseId: "overhead_press", sets: 5, reps: 5 },
+    { exerciseId: "deadlift", sets: 1, reps: 5 },
   ],
 };
+
+export const DEFAULT_WORKOUT_GROUPS: WorkoutTemplate[] = [DEFAULT_WORKOUT_A, DEFAULT_WORKOUT_B];
 
 export const STARTING_WEIGHTS: Record<ExerciseKey, number> = {
   squat: 45,

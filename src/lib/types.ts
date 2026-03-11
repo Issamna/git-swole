@@ -5,7 +5,7 @@ export type ExerciseKey =
   | "overhead_press"
   | "deadlift";
 
-export type WorkoutType = "A" | "B";
+export type WorkoutType = string;
 export type WeightUnit = "lb" | "kg";
 export type WorkoutSummary = "up" | "down";
 export type ExerciseOwnership = "global" | "user";
@@ -31,13 +31,13 @@ export type ExerciseCatalogItem = {
 };
 
 export type ProgramExercise = {
-  exerciseKey: ExerciseKey;
+  exerciseId: string;
   sets: number;
   reps: number;
 };
 
 export type WorkoutTemplate = {
-  type: WorkoutType;
+  id: string;
   name: string;
   exercises: ProgramExercise[];
 };
@@ -80,9 +80,7 @@ export type AppSettings = {
   weightIncrement: 2.5 | 5 | 10;
   restTimerSeconds: number;
   barbellWeight: number;
-  // Lets user adjust program slots while keeping workout A/B structure.
-  workoutAExercises: ExerciseKey[];
-  workoutBExercises: ExerciseKey[];
+  workoutGroups: WorkoutTemplate[];
 };
 
 export type PersonalRecord = {

@@ -1,5 +1,5 @@
 import { STARTING_WEIGHTS } from "@/lib/program";
-import { ExerciseKey, ProgressionState, WorkoutExerciseLog, WorkoutType } from "@/lib/types";
+import { ExerciseKey, ProgressionState, WorkoutExerciseLog } from "@/lib/types";
 
 const INITIAL_FAIL_STREAKS: Record<ExerciseKey, number> = {
   squat: 0,
@@ -10,7 +10,7 @@ const INITIAL_FAIL_STREAKS: Record<ExerciseKey, number> = {
 };
 
 export const DEFAULT_PROGRESSION: ProgressionState = {
-  nextWorkoutType: "A",
+  nextWorkoutType: "workout-a",
   currentWeights: { ...STARTING_WEIGHTS },
   failStreaks: { ...INITIAL_FAIL_STREAKS },
 };
@@ -28,14 +28,15 @@ function didExerciseSucceed(exercise: WorkoutExerciseLog) {
   });
 }
 
-export function getNextWorkoutType(currentType: WorkoutType): WorkoutType {
-  return currentType === "A" ? "B" : "A";
+export function getNextWorkoutType(currentType: string): string {
+  return currentType === "workout-a" ? "workout-b" : "workout-a";
 }
 
 export function applyWorkoutProgression(
   previous: ProgressionState,
   exerciseLogs: WorkoutExerciseLog[],
   baseIncrement: number,
+  nextWorkoutTypeOverride?: string,
 ): ProgressionState {
   const nextWeights = { ...previous.currentWeights };
   const nextFailStreaks = { ...previous.failStreaks };
@@ -65,6 +66,6 @@ export function applyWorkoutProgression(
   return {
     currentWeights: nextWeights,
     failStreaks: nextFailStreaks,
-    nextWorkoutType: getNextWorkoutType(previous.nextWorkoutType),
+    nextWorkoutType: nextWorkoutTypeOverride ?? getNextWorkoutType(previous.nextWorkoutType),
   };
 }
