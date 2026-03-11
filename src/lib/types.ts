@@ -30,6 +30,11 @@ export type ExerciseCatalogItem = {
   ownership: ExerciseOwnership;
 };
 
+export type PlateInventoryItem = {
+  weight: number;
+  pairs: number;
+};
+
 export type ProgramExercise = {
   exerciseId: string;
   sets: number;
@@ -80,6 +85,7 @@ export type AppSettings = {
   weightIncrement: 2.5 | 5 | 10;
   restTimerSeconds: number;
   barbellWeight: number;
+  plateInventory: PlateInventoryItem[];
   workoutGroups: WorkoutTemplate[];
 };
 

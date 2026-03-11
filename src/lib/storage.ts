@@ -1,6 +1,7 @@
 import { DEFAULT_PROGRESSION } from "@/lib/progression";
 import {
   ExerciseCatalogItem,
+  PlateInventoryItem,
   ExerciseKey,
   WorkoutAppState,
   WorkoutLog,
@@ -19,6 +20,14 @@ export const DEFAULT_APP_STATE: WorkoutAppState = {
     weightIncrement: 5,
     restTimerSeconds: 90,
     barbellWeight: 45,
+    plateInventory: [
+      { weight: 45, pairs: 99 },
+      { weight: 35, pairs: 99 },
+      { weight: 25, pairs: 99 },
+      { weight: 10, pairs: 99 },
+      { weight: 5, pairs: 99 },
+      { weight: 2.5, pairs: 99 },
+    ],
     workoutGroups: DEFAULT_WORKOUT_GROUPS,
   },
   progression: DEFAULT_PROGRESSION,
@@ -105,6 +114,20 @@ function migrateLegacyWorkoutGroups(settings: Partial<WorkoutAppState["settings"
   ];
 }
 
+function normalizePlateInventory(input: unknown): PlateInventoryItem[] {
+  if (!Array.isArray(input)) {
+    return DEFAULT_APP_STATE.settings.plateInventory;
+  }
+  const cleaned = input
+    .filter((item): item is PlateInventoryItem => !!item && typeof item === "object")
+    .map((item) => ({
+      weight: Number(item.weight),
+      pairs: Math.max(0, Number(item.pairs)),
+    }))
+    .filter((item) => Number.isFinite(item.weight) && item.weight > 0 && Number.isFinite(item.pairs));
+  return cleaned.length > 0 ? cleaned : DEFAULT_APP_STATE.settings.plateInventory;
+}
+
 function normalizeNextWorkoutType(nextWorkoutType: string | undefined, workoutGroups: WorkoutAppState["settings"]["workoutGroups"]) {
   if (!nextWorkoutType) {
     return workoutGroups[0]?.id ?? DEFAULT_PROGRESSION.nextWorkoutType;
@@ -143,6 +166,7 @@ export function loadLocalState(): WorkoutAppState {
       settings: {
         ...DEFAULT_APP_STATE.settings,
         ...parsed.settings,
+        plateInventory: normalizePlateInventory(parsed.settings?.plateInventory),
         workoutGroups,
       },
       progression: {
@@ -268,6 +292,7 @@ export async function syncFromSupabase(
         weightIncrement: settingsRes.data.weight_increment,
         restTimerSeconds: settingsRes.data.rest_timer_seconds,
         barbellWeight: settingsRes.data.barbell_weight,
+        plateInventory: normalizePlateInventory(settingsRes.data.plate_inventory),
         workoutGroups: syncedWorkoutGroups,
       },
       progression: {
@@ -302,6 +327,7 @@ export async function persistSupabaseState(
       weight_increment: state.settings.weightIncrement,
       rest_timer_seconds: state.settings.restTimerSeconds,
       barbell_weight: state.settings.barbellWeight,
+      plate_inventory: state.settings.plateInventory,
       workout_groups: state.settings.workoutGroups,
       updated_at: new Date().toISOString(),
     }),

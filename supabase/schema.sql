@@ -6,6 +6,7 @@ create table if not exists public.users (
   weight_increment numeric not null default 5,
   rest_timer_seconds integer not null default 90,
   barbell_weight numeric not null default 45,
+  plate_inventory jsonb not null default '[]'::jsonb,
   workout_groups jsonb not null default '[]'::jsonb,
   workout_a_exercise_ids text[] not null default array['squat', 'bench_press', 'barbell_row'],
   workout_b_exercise_ids text[] not null default array['squat', 'overhead_press', 'deadlift'],
@@ -70,6 +71,8 @@ alter table public.users
   add column if not exists workout_b_exercise_ids text[] not null default array['squat', 'overhead_press', 'deadlift'];
 alter table public.users
   add column if not exists workout_groups jsonb not null default '[]'::jsonb;
+alter table public.users
+  add column if not exists plate_inventory jsonb not null default '[]'::jsonb;
 
 update public.users
 set
@@ -113,6 +116,17 @@ set workout_groups = jsonb_build_array(
   )
 )
 where workout_groups = '[]'::jsonb;
+
+update public.users
+set plate_inventory = jsonb_build_array(
+  jsonb_build_object('weight', 45, 'pairs', 99),
+  jsonb_build_object('weight', 35, 'pairs', 99),
+  jsonb_build_object('weight', 25, 'pairs', 99),
+  jsonb_build_object('weight', 10, 'pairs', 99),
+  jsonb_build_object('weight', 5, 'pairs', 99),
+  jsonb_build_object('weight', 2.5, 'pairs', 99)
+)
+where plate_inventory = '[]'::jsonb;
 
 do $$
 begin

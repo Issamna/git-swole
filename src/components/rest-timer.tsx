@@ -10,6 +10,26 @@ type RestTimerProps = {
 export function RestTimer({ defaultSeconds, autoStartToken = 0 }: RestTimerProps) {
   const [secondsLeft, setSecondsLeft] = useState(defaultSeconds);
   const [isRunning, setIsRunning] = useState(false);
+  const notifyRestComplete = () => {
+    try {
+      const audioContext = new window.AudioContext();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = 880;
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+      oscillator.start();
+      oscillator.stop(audioContext.currentTime + 0.25);
+    } catch {
+      // Ignore autoplay or audio-context restrictions.
+    }
+
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Rest timer done", { body: "Time for your next set." });
+    }
+  };
 
   useEffect(() => {
     if (!isRunning) {
@@ -20,6 +40,7 @@ export function RestTimer({ defaultSeconds, autoStartToken = 0 }: RestTimerProps
         if (previous <= 1) {
           window.clearInterval(interval);
           setIsRunning(false);
+          notifyRestComplete();
           return 0;
         }
         return previous - 1;
@@ -35,6 +56,9 @@ export function RestTimer({ defaultSeconds, autoStartToken = 0 }: RestTimerProps
   useEffect(() => {
     if (autoStartToken <= 0) {
       return;
+    }
+    if ("Notification" in window && Notification.permission === "default") {
+      void Notification.requestPermission();
     }
     setSecondsLeft(defaultSeconds);
     setIsRunning(true);

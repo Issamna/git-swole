@@ -91,6 +91,13 @@ export default function SettingsPage() {
 
   const tabClass = (tab: SettingsTab) =>
     `rounded-md px-3 py-1.5 text-sm ${activeTab === tab ? "bg-[#45bb7c] font-medium text-[#112019]" : "bg-[#2b3a43] text-white"}`;
+  const updatePlatePairs = (weight: number, pairs: number) => {
+    updateSettings({
+      plateInventory: settings.plateInventory.map((item) =>
+        item.weight === weight ? { ...item, pairs: Math.max(0, pairs) } : item,
+      ),
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -157,6 +164,26 @@ export default function SettingsPage() {
               value={settings.barbellWeight}
               onChange={(event) => updateSettings({ barbellWeight: Number(event.target.value) })}
             />
+          </div>
+
+          <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
+            <div className="text-sm text-[#9ab0bd]">Plate Inventory (pairs)</div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {settings.plateInventory
+                .sort((a, b) => b.weight - a.weight)
+                .map((plate) => (
+                  <label key={plate.weight} className="flex items-center justify-between gap-2 text-sm">
+                    <span>{plate.weight} lb</span>
+                    <input
+                      className="w-24 rounded border border-[#334753] bg-[#2b3a43] px-2 py-1"
+                      type="number"
+                      min={0}
+                      value={plate.pairs}
+                      onChange={(event) => updatePlatePairs(plate.weight, Number(event.target.value))}
+                    />
+                  </label>
+                ))}
+            </div>
           </div>
         </div>
       ) : null}

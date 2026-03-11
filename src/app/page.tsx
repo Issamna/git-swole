@@ -3,10 +3,25 @@
 import Link from "next/link";
 import { SignInButton, useAuth } from "@clerk/nextjs";
 import { useWorkoutApp } from "@/context/workout-app-context";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const { isSignedIn } = useAuth();
   const { nextWorkoutExercises, currentWeights, workoutLogs, stateLoaded, nextWorkoutName } = useWorkoutApp();
+  const [lastSessionSummary, setLastSessionSummary] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const summary = window.sessionStorage.getItem("git-swole-last-session-summary");
+    if (!summary) {
+      return;
+    }
+    const timer = window.setTimeout(() => setLastSessionSummary(summary), 0);
+    window.sessionStorage.removeItem("git-swole-last-session-summary");
+    return () => window.clearTimeout(timer);
+  }, []);
 
   if (!stateLoaded) {
     return <div className="rounded-lg border border-[#334753] bg-[#24323a] p-6">Loading...</div>;
@@ -14,6 +29,11 @@ export default function Home() {
 
   return (
     <div className="space-y-4">
+      {lastSessionSummary ? (
+        <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4 text-sm text-[#d7e4eb]">
+          {lastSessionSummary}
+        </div>
+      ) : null}
       <div className="rounded-xl border border-[#334753] bg-[#24323a] p-5">
         <div className="text-sm text-[#9ab0bd]">Next Workout</div>
         <h1 className="text-3xl font-bold">{nextWorkoutName}</h1>
@@ -45,7 +65,7 @@ export default function Home() {
                 {workout.exercises
                   .map(
                     (exercise) =>
-                      `${exercise.exerciseName} ${exercise.weight}`,
+                      `${exercise.exerciseName} ${exercise.weight} (${exercise.setResults.map((setResult) => setResult.completedReps).join("/")})`,
                   )
                   .join(" | ")}
               </div>

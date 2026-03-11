@@ -50,7 +50,8 @@ export function applyWorkoutProgression(
 
     if (succeeded) {
       const increment = getIncrement(key, baseIncrement);
-      nextWeights[key] = Number((nextWeights[key] + increment).toFixed(2));
+      const basedOnPerformedWeight = exerciseLog.weight + increment;
+      nextWeights[key] = Number((Math.max(nextWeights[key] + increment, basedOnPerformedWeight)).toFixed(2));
       nextFailStreaks[key] = 0;
       continue;
     }

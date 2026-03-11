@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useWorkoutApp } from "@/context/workout-app-context";
 import { RestTimer } from "@/components/rest-timer";
 import { calculatePlates } from "@/lib/plates";
@@ -8,6 +9,7 @@ import { WorkoutSummary } from "@/lib/types";
 import { generateWarmupSets } from "@/lib/warmup";
 
 type SetState = {
+  input: string;
   completedReps: number;
   completed: boolean;
   skipped: boolean;
@@ -16,6 +18,7 @@ type SetState = {
 type WorkoutDraft = {
   nextWorkoutType: string;
   activeExerciseIndex: number;
+  startedAt: number;
   workoutNote: string;
   workoutSummary?: WorkoutSummary;
   setStates: Record<string, SetState[]>;
@@ -25,12 +28,14 @@ type WorkoutDraft = {
 const WORKOUT_DRAFT_KEY = "git-swole-workout-draft-v1";
 
 export function WorkoutSession() {
+  const router = useRouter();
   const { settings, currentWeights, nextWorkoutExercises, nextWorkoutType, completeWorkout } = useWorkoutApp();
   const buildInitialSetStates = useCallback(() => {
     const initial: Record<string, SetState[]> = {};
     for (const exercise of nextWorkoutExercises) {
       const key = exercise.exerciseId;
       initial[key] = Array.from({ length: exercise.sets }).map(() => ({
+        input: String(exercise.reps),
         completedReps: exercise.reps,
         completed: false,
         skipped: false,
@@ -41,6 +46,7 @@ export function WorkoutSession() {
   const [restTick, setRestTick] = useState(0);
   const [workoutNote, setWorkoutNote] = useState("");
   const [workoutSummary, setWorkoutSummary] = useState<WorkoutSummary | undefined>(undefined);
+  const [startedAt, setStartedAt] = useState<number>(() => Date.now());
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [setStates, setSetStates] = useState<Record<string, SetState[]>>(buildInitialSetStates);
@@ -50,19 +56,13 @@ export function WorkoutSession() {
   const activeExerciseWeight =
     (activeExercise ? weightOverrides[activeExercise.exerciseId] : undefined) ??
     (activeExercise?.exerciseKey ? currentWeights[activeExercise.exerciseKey] : 0);
-  const plates = calculatePlates(activeExerciseWeight, settings.barbellWeight);
+  const plates = calculatePlates(activeExerciseWeight, settings.barbellWeight, settings.plateInventory);
   const warmup = generateWarmupSets(activeExerciseWeight, settings.barbellWeight);
-
-  const isWorkoutReadyToFinish = useMemo(() => {
-    return nextWorkoutExercises.every((exercise) =>
-      setStates[exercise.exerciseId]?.every((setState) => setState.completed || setState.skipped),
-    );
-  }, [nextWorkoutExercises, setStates]);
 
   const updateSet = (exerciseKey: string, setIndex: number, nextSet: Partial<SetState>) => {
     setSetStates((previous) => {
       const cloned = [...(previous[exerciseKey] ?? [])];
-      cloned[setIndex] = { ...cloned[setIndex], ...nextSet };
+      cloned[setIndex] = { ...cloned[setIndex], ...nextSet } as SetState;
       return { ...previous, [exerciseKey]: cloned };
     });
   };
@@ -104,6 +104,7 @@ export function WorkoutSession() {
       setActiveExerciseIndex(
         Math.min(Math.max(parsed.activeExerciseIndex ?? 0, 0), nextWorkoutExercises.length - 1),
       );
+      setStartedAt(parsed.startedAt ?? Date.now());
     } catch {
       // Ignore invalid draft payload and continue fresh.
     } finally {
@@ -119,13 +120,14 @@ export function WorkoutSession() {
     const draft: WorkoutDraft = {
       nextWorkoutType,
       activeExerciseIndex,
+      startedAt,
       workoutNote,
       workoutSummary,
       setStates,
       weightOverrides,
     };
     window.localStorage.setItem(WORKOUT_DRAFT_KEY, JSON.stringify(draft));
-  }, [activeExerciseIndex, draftLoaded, nextWorkoutType, setStates, weightOverrides, workoutNote, workoutSummary]);
+  }, [activeExerciseIndex, draftLoaded, nextWorkoutType, setStates, startedAt, weightOverrides, workoutNote, workoutSummary]);
 
   const clearDraft = () => {
     if (typeof window !== "undefined") {
@@ -137,6 +139,7 @@ export function WorkoutSession() {
     setWorkoutNote("");
     setWorkoutSummary(undefined);
     setActiveExerciseIndex(0);
+    setStartedAt(Date.now());
     setRestTick(0);
     setWeightOverrides({});
     setSetStates(buildInitialSetStates());
@@ -156,6 +159,28 @@ export function WorkoutSession() {
   }
 
   const finishWorkout = () => {
+    const hasIncompleteSets = nextWorkoutExercises.some((exercise) =>
+      setStates[exercise.exerciseId].some((setResult) => !setResult.completed && !setResult.skipped),
+    );
+    if (hasIncompleteSets) {
+      const confirmed = window.confirm(
+        "Some sets are incomplete. Finish anyway and record those as 0 reps?",
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const elapsedMinutes = Math.max(1, Math.round((Date.now() - startedAt) / 60000));
+    const exerciseSummary = nextWorkoutExercises
+      .map((exercise) => {
+        const performedWeight =
+          weightOverrides[exercise.exerciseId] ??
+          (exercise.exerciseKey ? currentWeights[exercise.exerciseKey] : 0);
+        return `${exercise.exerciseName} ${performedWeight}${settings.units}`;
+      })
+      .join(" | ");
+
     completeWorkout({
       note: workoutNote || undefined,
       summary: workoutSummary,
@@ -169,15 +194,22 @@ export function WorkoutSession() {
         setResults: setStates[exercise.exerciseId].map((setResult, index) => ({
           setNumber: index + 1,
           targetReps: exercise.reps,
-          completedReps: setResult.completedReps,
+          completedReps: setResult.completed || setResult.skipped ? setResult.completedReps : 0,
           completed: setResult.completed,
-          skipped: setResult.skipped,
+          skipped: setResult.skipped || (!setResult.completed && !setResult.skipped),
         })),
       })),
     });
 
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(
+        "git-swole-last-session-summary",
+        `Total time: ${elapsedMinutes} min. ${exerciseSummary}. You are a handsome big boy.`,
+      );
+    }
     clearDraft();
     resetSession();
+    router.push("/");
   };
 
   return (
@@ -214,25 +246,37 @@ export function WorkoutSession() {
               <div className="text-sm">Set {index + 1}</div>
               <input
                 className="rounded border border-[#334753] bg-[#2b3a43] px-2 py-1 text-sm"
-                type="number"
+                type="text"
+                inputMode="numeric"
                 placeholder="reps"
-                value={setState.completedReps}
-                onChange={(event) =>
-                  {
-                    const completedReps = Number(event.target.value);
-                    const hasReps = completedReps > 0;
+                value={setState.input}
+                onChange={(event) => {
+                  const raw = event.target.value.replace(/[^0-9]/g, "");
+                  if (raw === "") {
                     updateSet(activeExercise.exerciseId, index, {
-                      completedReps,
-                      completed: hasReps,
-                      skipped: hasReps ? false : setState.skipped,
+                      input: "",
+                      completedReps: 0,
+                      completed: false,
                     });
+                    return;
                   }
-                }
+                  const completedReps = Number(raw);
+                  const hasReps = completedReps > 0;
+                  updateSet(activeExercise.exerciseId, index, {
+                    input: raw,
+                    completedReps,
+                    completed: hasReps,
+                    skipped: hasReps ? false : setState.skipped,
+                  });
+                }}
               />
               <button
                 className={`rounded px-2 py-1 text-xs ${setState.completed ? "bg-[#45bb7c] text-[#112019]" : "bg-[#2b3a43] text-white"}`}
                 onClick={() => {
                   updateSet(activeExercise.exerciseId, index, {
+                    input: String(
+                      setStates[activeExercise.exerciseId][index].completedReps || activeExercise.reps,
+                    ),
                     completed: true,
                     skipped: false,
                     completedReps:
@@ -247,6 +291,8 @@ export function WorkoutSession() {
                 className={`rounded px-2 py-1 text-xs ${setState.skipped ? "bg-amber-500 text-white" : "bg-[#2b3a43] text-white"}`}
                 onClick={() => {
                   updateSet(activeExercise.exerciseId, index, {
+                    input: "0",
+                    completedReps: 0,
                     skipped: true,
                     completed: false,
                   });
@@ -278,12 +324,21 @@ export function WorkoutSession() {
       <div className="grid gap-4 md:grid-cols-2">
         <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
           <div className="text-sm text-[#9ab0bd]">Plate Calculator</div>
-          <div className="mt-1 text-sm">{plates.length > 0 ? `Per side: ${plates.join(" / ")}` : "Bar only"}</div>
+          <div className="mt-1 text-sm">
+            {plates.length > 0 ? `Per side: ${plates.join(" / ")}` : "No exact plate combination"}
+          </div>
         </div>
         <div className="rounded-xl border border-[#334753] bg-[#24323a] p-4">
           <div className="text-sm text-[#9ab0bd]">Warmup</div>
-          <div className="mt-1 text-sm">
-            {warmup.map((set) => `${set.weight} x${set.reps}`).join("  |  ")}
+          <div className="mt-1 space-y-1 text-sm">
+            {warmup.map((set, idx) => {
+              const warmupPlates = calculatePlates(set.weight, settings.barbellWeight, settings.plateInventory);
+              return (
+                <div key={idx}>
+                  {set.weight} x{set.reps} ({warmupPlates.length > 0 ? warmupPlates.join(" / ") : "bar only"})
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -317,8 +372,7 @@ export function WorkoutSession() {
       </div>
 
       <button
-        className="w-full rounded-lg bg-[#45bb7c] px-4 py-2 font-medium text-[#112019] disabled:bg-[#334753] disabled:text-[#8ca5b3]"
-        disabled={!isWorkoutReadyToFinish}
+        className="w-full rounded-lg bg-[#45bb7c] px-4 py-2 font-medium text-[#112019]"
         onClick={finishWorkout}
       >
         Finish Workout

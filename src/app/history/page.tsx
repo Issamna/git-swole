@@ -50,7 +50,7 @@ export default function HistoryPage() {
               {workout.exercises
                 .map(
                   (exercise) =>
-                    `${getExerciseName(exercise.exerciseKey, exercise.exerciseName)} ${exercise.weight}`,
+                    `${getExerciseName(exercise.exerciseKey, exercise.exerciseName)} ${exercise.weight} (${exercise.setResults.map((setResult) => setResult.completedReps).join("/")})`,
                 )
                 .join(" | ")}
             </div>

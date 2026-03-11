@@ -28,7 +28,12 @@ export default function ProgressPage() {
     return [...workoutLogs]
       .reverse()
       .map((workout) => {
-        const exercise = workout.exercises.find((item) => item.exerciseKey === selectedExercise);
+        const selectedExerciseName = getExerciseName(selectedExercise).toLowerCase();
+        const exercise = workout.exercises.find(
+          (item) =>
+            item.exerciseKey === selectedExercise ||
+            item.exerciseName.toLowerCase() === selectedExerciseName,
+        );
         const volume = exercise
           ? exercise.setResults.reduce((sum, setResult) => sum + setResult.completedReps * exercise.weight, 0)
           : 0;
@@ -38,7 +43,8 @@ export default function ProgressPage() {
           volume,
           frequency: 1,
         };
-      });
+      })
+      .filter((entry) => entry.weight !== null || entry.volume > 0);
   }, [selectedExercise, workoutLogs]);
 
   return (
