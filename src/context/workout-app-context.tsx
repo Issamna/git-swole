@@ -1,11 +1,12 @@
 "use client";
 
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useAuth, useUser } from "@/lib/auth";
+import { IS_DEV_AUTH } from "@/lib/dev-auth";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { DEFAULT_PROGRESSION } from "@/lib/progression";
 import { applyWorkoutProgression } from "@/lib/progression";
 import { ImportedWorkoutDraft } from "@/lib/importer";
-import { EXERCISE_BY_KEY } from "@/lib/program";
+import { EXERCISE_BY_KEY, getNextDayId } from "@/lib/program";
 import {
   DEFAULT_APP_STATE,
   deleteWorkoutFromSupabase,
@@ -22,6 +23,7 @@ import {
   AppSettings,
   ExerciseCatalogItem,
   ExerciseKey,
+  ExerciseMode,
   PersonalRecord,
   WorkoutTemplate,
   WorkoutExerciseLog,
@@ -42,6 +44,8 @@ type WorkoutAppContextValue = {
     exerciseKey?: ExerciseKey;
     sets: number;
     reps: number;
+    inc: number;
+    mode: ExerciseMode;
   }[];
   currentWeights: Record<ExerciseKey, number>;
   exerciseCatalog: ExerciseCatalogItem[];
@@ -51,6 +55,7 @@ type WorkoutAppContextValue = {
     exercises: WorkoutExerciseLog[];
     note?: string;
     summary?: WorkoutSummary;
+    durationSeconds?: number;
   }) => void;
   updateSettings: (nextSettings: Partial<AppSettings>) => void;
   deleteWorkout: (workoutId: string) => void;
@@ -115,6 +120,9 @@ function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number, wor
   const ascending = [...logs].sort((a, b) => (a.date > b.date ? 1 : -1));
   let progression = { ...DEFAULT_PROGRESSION };
 
+  // Most recent first, so the A → B → A → C alternation can be resolved as we replay.
+  const processedDayIds: string[] = [];
+
   for (const workout of ascending) {
     const normalizedWorkoutType = mapLegacyWorkoutTypeToGroupId(workout.workoutType);
     progression = applyWorkoutProgression(
@@ -124,22 +132,28 @@ function recomputeProgressionFromLogs(logs: WorkoutLog[], increment: number, wor
       },
       workout.exercises,
       increment,
-      getNextWorkoutGroupId(normalizedWorkoutType, workoutGroups),
+      getNextWorkoutGroupId(normalizedWorkoutType, workoutGroups, processedDayIds),
     );
+    processedDayIds.unshift(normalizedWorkoutType);
   }
 
   return progression;
 }
 
-function getNextWorkoutGroupId(currentGroupId: string, groups: WorkoutTemplate[]) {
+/** `previousDayIds` is the day history, most recent first — see getNextDayId. */
+function getNextWorkoutGroupId(
+  currentGroupId: string,
+  groups: WorkoutTemplate[],
+  previousDayIds: string[] = [],
+) {
   if (groups.length === 0) {
     return currentGroupId;
   }
-  const currentIndex = groups.findIndex((group) => group.id === currentGroupId);
-  if (currentIndex < 0) {
+  if (groups.findIndex((group) => group.id === currentGroupId) < 0) {
     return groups[0].id;
   }
-  return groups[(currentIndex + 1) % groups.length].id;
+  // A → B → A → C, not a plain cycle through the day list.
+  return getNextDayId(currentGroupId, groups, previousDayIds);
 }
 
 function mapLegacyWorkoutTypeToGroupId(type: string) {
@@ -248,13 +262,25 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const localState = loadLocalState();
-      setState(localState);
-      setStateLoaded(true);
-    }, 0);
+    let cancelled = false;
 
-    return () => window.clearTimeout(timer);
+    void (async () => {
+      if (IS_DEV_AUTH) {
+        // Dynamically imported so the seed data never reaches a production bundle.
+        const devSeed = await import("@/lib/dev-seed");
+        devSeed.ensureDevSeed();
+        devSeed.installDevHelpers();
+      }
+      if (cancelled) {
+        return;
+      }
+      setState(loadLocalState());
+      setStateLoaded(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -291,6 +317,12 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   }, [getSupabaseToken, stateLoaded, user?.id]);
 
   useEffect(() => {
+    if (IS_DEV_AUTH) {
+      void import("@/lib/dev-seed").then((devSeed) => {
+        setExerciseCatalog(devSeed.buildDevExerciseCatalog());
+      });
+      return;
+    }
     if (!user?.id) {
       return;
     }
@@ -363,6 +395,8 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
         exerciseKey,
         sets: Math.max(1, Number(exercise.sets || (idx === 2 && exerciseKey === "deadlift" ? 1 : 5))),
         reps: Math.max(1, Number(exercise.reps || 5)),
+        inc: Number.isFinite(Number(exercise.inc)) ? Number(exercise.inc) : 5,
+        mode: exercise.mode ?? "BB",
       };
     });
   }, [exerciseCatalog, state.progression.nextWorkoutType, state.settings.workoutGroups]);
@@ -371,15 +405,18 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     exercises,
     note,
     summary,
+    durationSeconds,
   }: {
     exercises: WorkoutExerciseLog[];
     note?: string;
     summary?: WorkoutSummary;
+    durationSeconds?: number;
   }) => {
     const nextLog: WorkoutLog = {
       id: crypto.randomUUID(),
       userId: user?.id ?? "local",
       date: new Date().toISOString(),
+      durationSeconds,
       workoutType: state.progression.nextWorkoutType,
       workoutNote: note,
       workoutSummary: summary,
@@ -394,6 +431,8 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
       const nextWorkoutGroupId = getNextWorkoutGroupId(
         previous.progression.nextWorkoutType,
         previous.settings.workoutGroups,
+        // workoutLogs is newest first, and excludes the session being saved.
+        previous.workoutLogs.map((workout) => mapLegacyWorkoutTypeToGroupId(workout.workoutType)),
       );
       const nextProgression = applyWorkoutProgression(
         previous.progression,
@@ -577,6 +616,14 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   const createOrUpdateUserExercise = async (
     input: Omit<ExerciseCatalogItem, "id" | "ownership" | "slug"> & { slug?: string },
   ) => {
+    if (IS_DEV_AUTH) {
+      const slug = input.slug ?? input.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const devItem: ExerciseCatalogItem = { ...input, id: slug, slug, ownership: "user" };
+      setExerciseCatalog((previous) =>
+        [...previous.filter((item) => item.id !== slug), devItem].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      return { ok: true };
+    }
     if (!user?.id) {
       return { ok: false, error: "You must be signed in to manage custom exercises." };
     }
