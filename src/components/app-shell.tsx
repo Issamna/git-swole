@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { SignInButton, UserButton, useAuth } from "@/lib/auth";
+import { usePathname, useRouter } from "next/navigation";
+import { UserButton, useAuth } from "@/lib/auth";
+import { useEffect } from "react";
 import { useNowMs } from "@/lib/use-now";
 import { useWorkoutApp } from "@/context/workout-app-context";
 
@@ -40,12 +41,37 @@ function useClock() {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { isSignedIn } = useAuth();
+  const router = useRouter();
+  const { isSignedIn, isLoaded } = useAuth();
   const { syncStatus, nextWorkoutName } = useWorkoutApp();
   const clock = useClock();
   const inSession = pathname === "/workout";
+  // The sign-in screen stands alone — no rail, no tabs, no app header.
+  const standalone = pathname === "/sign-in";
 
-  const breadcrumb = NAV.find((item) => item.href === pathname)?.label ?? "Today";
+  /*
+   * The app is gated: without a session there is nothing to show, because all
+   * data belongs to an account. Signed-out visits bounce to the sign-in screen.
+   */
+  const locked = isLoaded && !isSignedIn && !standalone;
+  useEffect(() => {
+    if (locked) {
+      router.replace("/sign-in");
+    }
+  }, [locked, router]);
+
+  // /import is reachable from Settings rather than the nav, so it needs its own label.
+  const breadcrumb =
+    NAV.find((item) => item.href === pathname)?.label ?? (pathname === "/import" ? "Import" : "Today");
+
+  if (standalone) {
+    return <div className="min-h-screen bg-bg text-ink">{children}</div>;
+  }
+
+  // Render nothing while the redirect runs, rather than flashing another user's app.
+  if (!isSignedIn) {
+    return <div className="min-h-screen bg-bg" />;
+  }
 
   return (
     <div className="min-h-screen bg-bg text-ink">
@@ -101,15 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 {isSignedIn ? (syncStatus === "error" ? "Sync error" : "Local only") : "Local"}
               </span>
-              {isSignedIn ? (
-                <UserButton />
-              ) : (
-                <SignInButton mode="modal">
-                  <button className="label border border-line px-3 py-2 text-[10px] text-ink-2 hover:border-green hover:text-green">
-                    Sign in
-                  </button>
-                </SignInButton>
-              )}
+              <UserButton />
               {pathname === "/" ? (
                 <Link
                   href="/workout"

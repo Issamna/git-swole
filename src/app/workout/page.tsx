@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWorkoutApp } from "@/context/workout-app-context";
+import { useAuth } from "@/lib/auth";
 import { BarDiagram } from "@/components/bar-diagram";
 import {
   buildQueue,
@@ -14,7 +15,7 @@ import {
   FINISH_LINES,
   formatClock,
   plateLine,
-  SESSION_STATE_KEY,
+  sessionStateKey,
   SessionExercise,
   SessionState,
   sessionVolume,
@@ -24,6 +25,7 @@ import { WorkoutExerciseLog } from "@/lib/types";
 
 export default function SessionScreen() {
   const router = useRouter();
+  const { userId: accountId } = useAuth();
   const {
     nextWorkoutExercises,
     nextWorkoutName,
@@ -63,7 +65,7 @@ export default function SessionScreen() {
     if (!stateLoaded || session || exercises.length === 0) {
       return;
     }
-    const raw = window.localStorage.getItem(SESSION_STATE_KEY);
+    const raw = window.localStorage.getItem(sessionStateKey(accountId));
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as SessionState;
@@ -87,14 +89,14 @@ export default function SessionScreen() {
         Math.floor(Math.random() * FINISH_HEADLINES.length),
       ),
     );
-  }, [stateLoaded, session, exercises, nextWorkoutType, currentWeights, settings.barbellWeight]);
+  }, [accountId, stateLoaded, session, exercises, nextWorkoutType, currentWeights, settings.barbellWeight]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     if (session) {
-      window.localStorage.setItem(SESSION_STATE_KEY, JSON.stringify(session));
+      window.localStorage.setItem(sessionStateKey(accountId), JSON.stringify(session));
     }
-  }, [session]);
+  }, [accountId, session]);
 
   /*
    * One tick a second drives both the elapsed clock and the rest countdown.
@@ -209,7 +211,7 @@ export default function SessionScreen() {
       })
       .filter((entry): entry is WorkoutExerciseLog => entry !== null);
 
-    window.localStorage.removeItem(SESSION_STATE_KEY);
+    window.localStorage.removeItem(sessionStateKey(accountId));
     if (logs.length === 0) {
       // Nothing was logged — do not write an empty workout into the history.
       router.push("/");
@@ -309,7 +311,7 @@ export default function SessionScreen() {
        * and at finish it reads as the completed session. On the phone the finish
        * state is a full-screen moment, as rest is, so the queue drops away.
        */}
-      <div className={finished ? "hidden desk:block" : undefined}>
+      <div className={finished || resting ? "hidden desk:block" : undefined}>
         <Queue
           exercises={exercises}
           session={session}
@@ -391,11 +393,33 @@ function LiveState({
             </div>
           </div>
 
-          <div className={`label mt-4 text-[9px] font-normal ${plate.short ? "text-amber" : "text-dim"}`}>
-            {plate.text}
+          {/*
+           * The plate line and the weight adjusters share a row on the phone. The
+           * mobile references have no ±5 at all, but a lifter at the rack needs to
+           * correct the working weight, so they are kept and compacted instead —
+           * which also keeps the queue reachable without scrolling.
+           */}
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <div className={`label text-[9px] font-normal ${plate.short ? "text-amber" : "text-dim"}`}>
+              {plate.text}
+            </div>
+            <div className="flex shrink-0 gap-1.5 desk:hidden">
+              <button
+                onClick={() => onAdjustWeight(-5)}
+                className="label h-[30px] w-[44px] border border-line text-[10px] text-ink-2"
+              >
+                −5
+              </button>
+              <button
+                onClick={() => onAdjustWeight(5)}
+                className="label h-[30px] w-[44px] border border-line text-[10px] text-ink-2"
+              >
+                +5
+              </button>
+            </div>
           </div>
 
-          <div className="mt-5 flex gap-2">
+          <div className="mt-5 hidden gap-2 desk:flex">
             <button
               onClick={() => onAdjustWeight(-5)}
               className="label h-[40px] w-[62px] border border-line text-[12px] text-ink-2 hover:border-amber hover:text-amber"
@@ -484,17 +508,21 @@ function RestState({
             strokeDashoffset={circumference * (1 - fraction)}
           />
         </svg>
-        <span className="num text-[96px] tabular-nums">{formatClock(remaining)}</span>
+        <span className="num text-[96px] tabular-nums" style={{ color: colour }}>
+          {formatClock(remaining)}
+        </span>
       </div>
 
       <div className="hidden w-full flex-col items-center desk:flex">
-        <span className="num text-[clamp(120px,17vw,240px)] tabular-nums">{formatClock(remaining)}</span>
+        <span className="num text-[clamp(120px,17vw,240px)] tabular-nums" style={{ color: colour }}>
+          {formatClock(remaining)}
+        </span>
         <div className="mt-6 h-[6px] w-full max-w-[720px] bg-ring-track-bar">
           <div className="h-full transition-[width]" style={{ width: `${fraction * 100}%`, background: colour }} />
         </div>
       </div>
 
-      <div className={`label mt-5 text-[9px] ${hit ? "text-green" : "text-amber"}`}>
+      <div className={`label mt-5 text-[9px] desk:hidden ${hit ? "text-green" : "text-amber"}`}>
         {hit ? "All reps · short rest" : "Missed reps · longer rest"}
       </div>
 
@@ -650,7 +678,7 @@ function Queue({
                     <button
                       key={`warm-${setIndex}`}
                       onClick={() => onWarmToggle(exercise.exerciseId, setIndex)}
-                      className={`flex h-[38px] w-[38px] flex-col items-center justify-center border desk:h-[48px] desk:w-[48px] ${
+                      className={`flex h-[34px] w-[34px] flex-col items-center justify-center border desk:h-[48px] desk:w-[48px] ${
                         checked
                           ? "border-amber-line bg-amber-wash-faint text-amber"
                           : isNow
@@ -685,7 +713,7 @@ function Queue({
                           targetReps: exercise.reps,
                         })
                       }
-                      className={`flex h-[38px] w-[38px] flex-col items-center justify-center border desk:h-[48px] desk:w-[48px] ${
+                      className={`flex h-[34px] w-[34px] flex-col items-center justify-center border desk:h-[48px] desk:w-[48px] ${
                         set.done
                           ? hit
                             ? "border-transparent bg-green-wash text-green"

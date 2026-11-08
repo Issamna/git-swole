@@ -285,9 +285,15 @@ export default function LogScreen() {
 
       {/* ---------- Mobile: the whole history as one list ---------- */}
       <div className="px-[22px] py-5 desk:hidden">
-        <h1 className="num mb-6 text-[56px] uppercase leading-[0.9]">Log</h1>
+        <div className="mb-6 flex items-end justify-between gap-4">
+          <h1 className="num text-[56px] uppercase leading-[0.9]">Log</h1>
+          <span className="label pb-2 text-[8.5px] font-normal text-dim">
+            {workoutLogs.length} sessions
+          </span>
+        </div>
 
-        {workoutLogs.map((workout) => {
+        {/* Paginated like the desktop list — 24 sessions is ~5,800px of scroll. */}
+        {visible.map((workout) => {
           const group = settings.workoutGroups.find((item) => item.id === workout.workoutType);
           const minutes = minutesOf(workout);
           return (
@@ -326,6 +332,28 @@ export default function LogScreen() {
             </div>
           );
         })}
+
+        {pageCount > 1 ? (
+          <div className="mt-6 flex items-center justify-between gap-3">
+            <button
+              disabled={currentPage === 0}
+              onClick={() => setPage(currentPage - 1)}
+              className="label h-[48px] flex-1 border border-line text-[10px] text-ink-2 disabled:text-off"
+            >
+              ‹ Newer
+            </button>
+            <span className="label px-1 text-[9px] font-normal text-dim">
+              {currentPage + 1} / {pageCount}
+            </span>
+            <button
+              disabled={currentPage >= pageCount - 1}
+              onClick={() => setPage(currentPage + 1)}
+              className="label h-[48px] flex-1 border border-line text-[10px] text-ink-2 disabled:text-off"
+            >
+              Older ›
+            </button>
+          </div>
+        ) : null}
       </div>
     </>
   );

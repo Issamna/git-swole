@@ -4,6 +4,9 @@
  * exercise catalog JSON). That chunk is still emitted by a production build, but
  * `IS_DEV_AUTH` is false there, so no production browser ever requests it.
  *
+ * Nothing is seeded automatically: every account starts empty. This is reached
+ * only through the console helpers below, when you want data to look at.
+ *
  * Generation is deterministic (no Math.random) so the History and Progress screens
  * look identical between reloads — useful when comparing UI work side by side.
  */
@@ -11,7 +14,7 @@
 // No alias exists for files outside src/, so this one import is relative.
 import globalExercises from "../../data/global-exercises.json";
 import { DEFAULT_WORKOUT_A, DEFAULT_WORKOUT_B, EXERCISE_BY_KEY, STARTING_WEIGHTS } from "@/lib/program";
-import { DEFAULT_APP_STATE, LOCAL_STATE_KEY } from "@/lib/storage";
+import { DEFAULT_APP_STATE, localStateKey } from "@/lib/storage";
 import {
   ExerciseCatalogItem,
   ExerciseKey,
@@ -131,39 +134,31 @@ function buildDevState(now: number): WorkoutAppState {
   };
 }
 
-/** Seeds localStorage only when it is empty, so your own test data is never clobbered. */
-export function ensureDevSeed() {
-  if (typeof window === "undefined" || window.localStorage.getItem(LOCAL_STATE_KEY)) {
-    return;
-  }
-  seedDevState();
+export function seedDevState(userId: string) {
+  window.localStorage.setItem(localStateKey(userId), JSON.stringify(buildDevState(Date.now())));
 }
 
-export function seedDevState() {
-  window.localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(buildDevState(Date.now())));
-}
-
-export function resetDevState() {
-  window.localStorage.removeItem(LOCAL_STATE_KEY);
+export function resetDevState(userId: string) {
+  window.localStorage.removeItem(localStateKey(userId));
 }
 
 /** Console helpers for reshaping local state mid-overhaul without digging through devtools. */
-export function installDevHelpers() {
+export function installDevHelpers(userId: string) {
   if (typeof window === "undefined") {
     return;
   }
   Object.assign(window, {
     gitSwoleDev: {
       seed: () => {
-        seedDevState();
+        seedDevState(userId);
         window.location.reload();
       },
       reset: () => {
-        resetDevState();
+        resetDevState(userId);
         window.location.reload();
       },
       empty: () => {
-        window.localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(DEFAULT_APP_STATE));
+        window.localStorage.setItem(localStateKey(userId), JSON.stringify(DEFAULT_APP_STATE));
         window.location.reload();
       },
     },

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useWorkoutApp } from "@/context/workout-app-context";
+import { ScrollStrip } from "@/components/scroll-strip";
 import { WeightUnit } from "@/lib/types";
 
 function Stepper({
@@ -83,12 +84,14 @@ export default function SettingsScreen() {
 
   return (
     <div className="px-[22px] py-5 desk:px-[26px]">
-      <h1 className="num mb-6 text-[56px] uppercase leading-[0.9] desk:text-[64px]">
+      {/* The strip already names the section; on a phone the headline is a duplicate. */}
+      <h1 className="num mb-6 hidden text-[56px] uppercase leading-[0.9] desk:block desk:text-[64px]">
         {sections.find((item) => item.key === section)?.label ?? "Settings"}
       </h1>
 
-      <div className="scrollbar-none -mx-[22px] mb-6 flex gap-px overflow-x-auto border-y border-line px-[22px] desk:mx-0 desk:px-0">
-        {sections.map((item) => {
+      <div className="-mx-[22px] mb-6 border-y border-line desk:mx-0">
+        <ScrollStrip>
+          {sections.map((item) => {
           const active = item.key === section;
           return (
             <button
@@ -99,10 +102,11 @@ export default function SettingsScreen() {
               }`}
             >
               <div className={`label text-[9px] ${active ? "text-ink" : "text-dim"}`}>{item.label}</div>
-              <div className="label mt-1 text-[8px] font-normal text-dim">{item.hint}</div>
-            </button>
-          );
-        })}
+                <div className="label mt-1 text-[8px] font-normal text-dim">{item.hint}</div>
+              </button>
+            );
+          })}
+        </ScrollStrip>
       </div>
 
       {section === "preferences" ? (

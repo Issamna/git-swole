@@ -195,9 +195,16 @@ function buildWorkoutFingerprint(workout: {
 
 export function WorkoutAppProvider({ children }: { children: React.ReactNode }) {
   const { user } = useUser();
-  const { getToken } = useAuth();
+  const { getToken, userId: accountId } = useAuth();
   const [state, setState] = useState(DEFAULT_APP_STATE);
   const [stateLoaded, setStateLoaded] = useState(false);
+  /*
+   * Which account the in-memory state belongs to. Without this, the persist effect
+   * fired once with the new account id but the previous account's state and wrote
+   * it under the new key — which also made the seeder think the account already
+   * had data.
+   */
+  const [loadedFor, setLoadedFor] = useState<string | null | undefined>(undefined);
   const [syncStatus, setSyncStatus] = useState<"local" | "syncing" | "synced" | "error">("local");
   const [syncError, setSyncError] = useState<string | null>(null);
   const [exerciseCatalog, setExerciseCatalog] = useState<ExerciseCatalogItem[]>([]);
@@ -261,27 +268,32 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
     [getSupabaseToken],
   );
 
+  /*
+   * Reloads whenever the signed-in account changes, so signing in as somebody else
+   * swaps the data rather than leaving the previous user's history on screen.
+   */
   useEffect(() => {
     let cancelled = false;
+    setStateLoaded(false);
 
     void (async () => {
-      if (IS_DEV_AUTH) {
-        // Dynamically imported so the seed data never reaches a production bundle.
+      if (IS_DEV_AUTH && accountId) {
+        // Console helpers only — nothing is seeded unless you ask for it.
         const devSeed = await import("@/lib/dev-seed");
-        devSeed.ensureDevSeed();
-        devSeed.installDevHelpers();
+        devSeed.installDevHelpers(accountId);
       }
       if (cancelled) {
         return;
       }
-      setState(loadLocalState());
+      setState(accountId ? loadLocalState(accountId) : DEFAULT_APP_STATE);
+      setLoadedFor(accountId);
       setStateLoaded(true);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accountId]);
 
   useEffect(() => {
     if (!stateLoaded || !user?.id) {
@@ -337,10 +349,11 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
   }, [getSupabaseToken, user?.id]);
 
   useEffect(() => {
-    if (!stateLoaded) {
+    // Never write one account's state under another account's key.
+    if (!stateLoaded || loadedFor !== accountId) {
       return;
     }
-    persistLocalState(state);
+    persistLocalState(accountId, state);
     if (user?.id) {
       void (async () => {
         const token = await getSupabaseToken();
@@ -368,7 +381,7 @@ export function WorkoutAppProvider({ children }: { children: React.ReactNode }) 
         }
       })();
     }
-  }, [getSupabaseToken, state, stateLoaded, user?.id]);
+  }, [accountId, loadedFor, getSupabaseToken, state, stateLoaded, user?.id]);
 
   const nextWorkoutExercises = useMemo(() => {
     const nextGroup =

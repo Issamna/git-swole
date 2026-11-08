@@ -89,13 +89,22 @@ export default function TodayScreen() {
       <div className="mb-8 grid grid-cols-7 gap-1.5">
         {week.days.map((day) => {
           // Completed fills the cell; today rings it. A day can be both.
+          /*
+           * Each branch carries its own border width; a shared `border` on the
+           * element used to beat the wider value in the cascade.
+           *
+           * The handoff asks for 1.5px on today, but Chrome rounds both
+           * border-width and outline-width to whole pixels, so 1.5px paints as 1px
+           * and today reads exactly as heavy as the hairlines around it. 2px keeps
+           * the intent — today is visibly heavier — and renders predictably.
+           */
           const filled = day.completed
-            ? "border-green bg-green text-bg"
+            ? "border border-green bg-green text-bg"
             : day.rest
-              ? "border-transparent bg-panel text-dim"
+              ? "border border-transparent bg-panel text-dim"
               : day.isToday
-                ? "border-[1.5px] border-green bg-transparent text-green"
-                : "border-line bg-transparent text-faint";
+                ? "border-2 border-green bg-transparent text-green"
+                : "border border-line bg-transparent text-faint";
           // The outline-only case already reads as today through its border.
           const ringed = day.isToday && (day.completed || day.rest);
 
@@ -103,8 +112,8 @@ export default function TodayScreen() {
             <div key={day.key} className="flex flex-col items-center gap-1.5">
               <span className="label text-[8px] text-dim">{day.dayLetter}</span>
               <div
-                className={`flex h-[44px] w-full items-center justify-center border ${filled} ${
-                  ringed ? "outline outline-[1.5px] outline-green outline-offset-2" : ""
+                className={`flex h-[44px] w-full items-center justify-center ${filled} ${
+                  ringed ? "outline-2 outline-green outline-offset-2" : ""
                 }`}
               >
                 {day.rest ? (

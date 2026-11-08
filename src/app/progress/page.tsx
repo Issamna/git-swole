@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useWorkoutApp } from "@/context/workout-app-context";
+import { ScrollStrip } from "@/components/scroll-strip";
 import { EXERCISES } from "@/lib/program";
 import { ExerciseKey, WorkoutExerciseLog } from "@/lib/types";
 
@@ -118,8 +119,9 @@ export default function ProgressScreen() {
   return (
     <div className="px-[22px] py-5 desk:px-[26px]">
       {/* Lift selector strip */}
-      <div className="scrollbar-none -mx-[22px] mb-6 flex gap-px overflow-x-auto border-y border-line px-[22px] desk:-mx-[26px] desk:px-[26px]">
-        {EXERCISES.map((exercise) => {
+      <div className="-mx-[22px] mb-6 border-y border-line desk:-mx-[26px]">
+        <ScrollStrip>
+          {EXERCISES.map((exercise) => {
           const activeLift = exercise.key === lift;
           const sessions = workoutLogs.filter((workout) =>
             workout.exercises.some((item) => item.exerciseKey === exercise.key),
@@ -139,10 +141,11 @@ export default function ProgressScreen() {
                 <span className={`label text-[9px] ${activeLift ? "text-ink" : "text-dim"}`}>{exercise.name}</span>
                 <span className="num text-[18px] text-green">{currentWeights[exercise.key] ?? "—"}</span>
               </div>
-              <div className="label mt-1 text-[8px] font-normal text-dim">{sessions} sessions</div>
-            </button>
-          );
-        })}
+                <div className="label mt-1 text-[8px] font-normal text-dim">{sessions} sessions</div>
+              </button>
+            );
+          })}
+        </ScrollStrip>
       </div>
 
       {stats ? (
@@ -294,7 +297,9 @@ export default function ProgressScreen() {
             ].map((stat, index) => (
               <div
                 key={stat.label}
-                className={`px-5 py-5 ${index > 0 ? "border-l border-line" : ""}`}
+                className={`px-5 py-5 ${index % 2 === 1 ? "border-l border-line" : ""} ${
+                  index >= 2 ? "border-t border-line desk:border-t-0" : ""
+                } ${index > 0 ? "desk:border-l desk:border-line" : ""}`}
               >
                 <div className="label text-[8.5px] text-dim">{stat.label}</div>
                 <div className="num mt-2 text-[26px] desk:text-[30px]">{stat.value}</div>

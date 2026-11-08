@@ -73,30 +73,43 @@ The Supabase client is called directly from the browser and is authorized by RLS
 > work, and avoid hardening code around the current program shape.
 
 
-### Dev auth bypass
+### Dev auth
 
 `NEXT_PUBLIC_DEV_AUTH=1` (dev builds only — `IS_DEV_AUTH` in `src/lib/dev-auth.ts`
-also requires `NODE_ENV !== "production"`) runs the app with no Clerk or Supabase
-credentials.
+also requires `NODE_ENV !== "production"`) runs auth without Clerk or Supabase.
 
 - **Import auth from `@/lib/auth`, never from `@clerk/nextjs` directly.** That
   module is the seam: it re-exports `useAuth`, `useUser`, `AuthProvider`,
-  `SignInButton`, and `UserButton`, swapping in dev stubs when the flag is on.
-  `src/proxy.ts` is the one legitimate exception.
+  `SignInButton`, and `UserButton`, swapping in dev implementations when the flag
+  is on. `src/proxy.ts` is the one legitimate exception.
 - The dev implementations are chosen at module load, not inside the hook, because
   no `ClerkProvider` is mounted in dev mode and Clerk's own hooks would throw.
-- They are also module-level frozen singletons. Returning a fresh object per
-  render invalidates the context's `getSupabaseToken` `useCallback` and spins the
-  effects into an infinite update loop — this was a real bug, do not "simplify" it.
-- **`useAuth().isSignedIn` is `true` but `useUser()` returns `user: null`.** That
-  asymmetry is deliberate: signed-in chrome renders while every Supabase call,
-  each gated on `user?.id`, stays off. New Supabase calls should keep that gate.
-- `src/lib/dev-seed.ts` seeds ~8 weeks of deterministic history into localStorage
-  on first load, supplies the exercise catalog from `data/global-exercises.json`,
-  and installs `window.gitSwoleDev.{seed,reset,empty}`. It is reached only through
-  a dynamic import behind `IS_DEV_AUTH`, so it is code-split into its own ~9 KB
-  chunk. A production build still emits that chunk, but nothing references it and
-  no production browser fetches it.
+- **It is a real session with a real identity.** `/sign-in` takes an email, derives
+  a stable user id from it, and stores the session under `git-swole-dev-auth`.
+  Different email, different account.
+- **The app is gated.** Without a session every route redirects to `/sign-in`;
+  there is no guest mode.
+- **`useAuth().userId` is what all local data is keyed on**, in both dev and Clerk
+  modes. `loadLocalState` / `persistLocalState` / `sessionStateKey` all namespace
+  by it. Before this, one global key was shared by every user, so signing out and
+  back in as somebody else showed the previous account's history.
+- **The auth value is cached per session object**, not rebuilt per render — a fresh
+  object each render invalidates the context's `getSupabaseToken` `useCallback` and
+  spins the effects into an infinite update loop.
+- **The hydration window reports `isLoaded: false`, not "signed out."** The store
+  cannot be read during hydration; reporting signed-out there made the gate fire on
+  every full page load and bounce a signed-in user to `/sign-in`.
+- **The context tracks `loadedFor`** — which account the in-memory state belongs to
+  — and refuses to persist unless it matches the current account. Otherwise the
+  persist effect fires once with the new account id and the previous account's
+  state, writing it under the new key.
+- **`useUser()` returns `user: null` in dev**, which keeps every Supabase call (all
+  gated on `user?.id`) switched off. New Supabase calls should keep that gate.
+- **Nothing is seeded automatically.** Every account starts empty.
+  `src/lib/dev-seed.ts` only installs `window.gitSwoleDev.{seed,reset,empty}`,
+  which act on the signed-in account when you want data to look at. It is reached
+  through a dynamic import behind `IS_DEV_AUTH`, so it is code-split into its own
+  chunk that production never fetches.
 
 ### The session screen
 

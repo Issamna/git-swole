@@ -2,7 +2,12 @@ import { computePlates } from "@/lib/plates";
 import { generateWarmupSets, WARMUP_SET_COUNT } from "@/lib/warmup";
 import { PlateInventoryItem } from "@/lib/types";
 
-export const SESSION_STATE_KEY = "git-swole-session-v1";
+const SESSION_STATE_PREFIX = "git-swole-session-v1";
+
+/** An in-progress session belongs to one account, like everything else local. */
+export function sessionStateKey(userId: string | null | undefined) {
+  return userId ? `${SESSION_STATE_PREFIX}:${userId}` : SESSION_STATE_PREFIX;
+}
 
 export type SessionExercise = {
   exerciseId: string;

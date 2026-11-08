@@ -12,7 +12,16 @@ import { EXERCISE_BY_KEY } from "@/lib/program";
 import { DEFAULT_WORKOUT_GROUPS } from "@/lib/program";
 import { DEFAULT_PLATE_INVENTORY } from "@/lib/plates";
 
-export const LOCAL_STATE_KEY = "git-swole-state-v1";
+const LOCAL_STATE_PREFIX = "git-swole-state-v1";
+
+/**
+ * Local state is namespaced per user. Without this, signing out and back in as
+ * somebody else showed the previous account's history — there was one global key
+ * that every user shared.
+ */
+export function localStateKey(userId: string | null | undefined) {
+  return userId ? `${LOCAL_STATE_PREFIX}:${userId}` : LOCAL_STATE_PREFIX;
+}
 export type SyncResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
 export const DEFAULT_APP_STATE: WorkoutAppState = {
@@ -151,12 +160,12 @@ function normalizeWorkoutLogType(workoutType: string) {
   return workoutType;
 }
 
-export function loadLocalState(): WorkoutAppState {
+export function loadLocalState(userId: string | null | undefined): WorkoutAppState {
   if (typeof window === "undefined") {
     return DEFAULT_APP_STATE;
   }
 
-  const raw = window.localStorage.getItem(LOCAL_STATE_KEY);
+  const raw = window.localStorage.getItem(localStateKey(userId));
   if (!raw) {
     return DEFAULT_APP_STATE;
   }
@@ -191,11 +200,11 @@ export function loadLocalState(): WorkoutAppState {
   }
 }
 
-export function persistLocalState(state: WorkoutAppState) {
+export function persistLocalState(userId: string | null | undefined, state: WorkoutAppState) {
   if (typeof window === "undefined") {
     return;
   }
-  window.localStorage.setItem(LOCAL_STATE_KEY, JSON.stringify(state));
+  window.localStorage.setItem(localStateKey(userId), JSON.stringify(state));
 }
 
 export async function syncFromSupabase(
