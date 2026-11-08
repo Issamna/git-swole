@@ -42,31 +42,41 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-## Local development without accounts
+## Deployment
 
-For UI work you do not need Clerk or Supabase credentials at all. Put this in
-`.env.local`:
+The app is hosted on Vercel at [git-swole.vercel.app](https://git-swole.vercel.app), and deploys run from GitHub Actions ([.github/workflows/deploy.yml](.github/workflows/deploy.yml)):
 
-```bash
-NEXT_PUBLIC_DEV_AUTH=1
-```
+- **Push to `main`** builds and deploys to production. `git-swole.vercel.app` updates automatically.
+- **Pull requests** get a preview deployment, and the workflow comments the preview URL on the PR.
+- **Manual run** (Actions tab, "Deploy to Vercel", "Run workflow") deploys a preview.
 
-Then `npm run dev`. The app treats you as signed in as a fake local user, so
-signed-in chrome renders, and it seeds ~8 weeks of realistic workout history the
-first time it loads so History, Progress, and PRs are not empty. Nothing touches
-the network: the sync badge stays on "Local only" and all data lives in
-localStorage.
+The app is built inside GitHub Actions (`vercel build`) and the finished build is uploaded (`vercel deploy --prebuilt`). That means the app's env vars come from GitHub secrets, not from the Vercel dashboard. A redeploy started from the Vercel dashboard won't have them, so redeploy by re-running the workflow instead.
 
-Console helpers are available while the flag is on:
+[vercel.json](vercel.json) turns off Vercel's own Git deploys, so pushes don't deploy twice.
 
-```js
-gitSwoleDev.seed()   // regenerate the seeded history
-gitSwoleDev.reset()  // clear local state (back to a first-run app)
-gitSwoleDev.empty()  // keep defaults but no workout history, for empty states
-```
+### GitHub secrets
 
-The flag is ignored when `NODE_ENV` is production, so it cannot disable real auth
-on a deployed build. Leave it unset to exercise the real Clerk and Supabase path.
+These are set in GitHub under Settings, then Secrets and variables, then Actions. The names must match exactly.
+
+| Secret | What it is | Where to get it |
+|---|---|---|
+| `VERCEL_TOKEN` | Lets the workflow deploy to Vercel | Vercel web: Account Settings, then Tokens |
+| `VERCEL_ORG_ID` | Vercel team/account ID (`team_...`) | Vercel CLI: run `npx vercel link`, then read `orgId` in `.vercel/repo.json` (or `.vercel/project.json`) |
+| `VERCEL_PROJECT_ID` | Vercel project ID (`prj_...`) | Vercel CLI: same file, `id` / `projectId`. Also in Vercel web: Project Settings, then General |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | Clerk public key (`pk_...`) | Clerk dashboard: Configure, then API Keys |
+| `CLERK_SECRET_KEY` | Clerk server key (`sk_...`) | Clerk dashboard: Configure, then API Keys |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL | Supabase dashboard: Project Settings, then API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public anon key | Supabase dashboard: Project Settings, then API |
+
+Keep `SUPABASE_SERVICE_ROLE_KEY` out of GitHub and Vercel. Only the local `npm run sync:exercises` script uses it, and it bypasses row-level security, so it can read and change everything in the database.
+
+### Transferring ownership
+
+If the app moves to a new owner, these are the pieces to transfer:
+
+- **GitHub repo:** Settings, then Transfer ownership. Repo secrets move with the repo, but any secret tied to a personal account (like `VERCEL_TOKEN`) should be regenerated.
+- **Vercel project:** transfer the project to the new owner's account or team, or redeploy it there. Then update `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` and `VERCEL_TOKEN`.
+- **Clerk and Supabase:** add the new owner as a member of the Clerk application and the Supabase project (or transfer them). The keys stay the same unless they're rotated.
 
 ## Implemented Features
 
